@@ -18,12 +18,12 @@ You must have the [Claude CLI](https://github.com/anthropics/claude-code) instal
 ### From Source
 
 ```bash
-go install github.com/dvitali/claude-code-usage/cmd/claude-usage@latest
+go install github.com/denysvitali/claude-code-usage/cmd/claude-usage@latest
 ```
 
 ### From Releases
 
-Download the appropriate binary for your platform from the [Releases](https://github.com/dvitali/claude-code-usage/releases) page.
+Download the appropriate binary for your platform from the [Releases](https://github.com/denysvitali/claude-code-usage/releases) page.
 
 ## Usage
 
@@ -36,21 +36,26 @@ claude-usage --json
 
 # Waybar-compatible JSON output
 claude-usage --waybar
+
+# Show version
+claude-usage --version
 ```
 
 ### Example Output
 
 ```
-Claude Usage Statistics
-=======================
+Claude Usage (Pro/Max Subscription)
+====================================
 
-Primary Rate Limit (5-hour window):
-  [████████████░░░░░░░░] 60.0%
-  Resets in: 2h 15m
+5-Hour Window:
+  Usage:    ████████████░░░░░░░░  60.0%
+  Resets:   in 2h 15m
 
-Daily Usage (7-day window):
-  [██████░░░░░░░░░░░░░░] 30.0%
-  Resets in: 3d 5h
+7-Day Window:
+  Usage:    ██████░░░░░░░░░░░░░░  30.0%
+  Resets:   in 3d 5h
+
+Token expires: 23h 45m
 ```
 
 ### Waybar Integration
@@ -71,7 +76,7 @@ Add this to your Waybar config:
 
 ```bash
 # Clone the repository
-git clone https://github.com/dvitali/claude-code-usage.git
+git clone https://github.com/denysvitali/claude-code-usage.git
 cd claude-code-usage
 
 # Build
