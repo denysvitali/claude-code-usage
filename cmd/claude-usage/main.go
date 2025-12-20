@@ -8,8 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dvitali/claude-code-usage/internal/api"
-	"github.com/dvitali/claude-code-usage/internal/credentials"
+	"github.com/denysvitali/claude-code-usage/internal/api"
+	"github.com/denysvitali/claude-code-usage/internal/credentials"
+	"github.com/denysvitali/claude-code-usage/internal/version"
 )
 
 const (
@@ -21,7 +22,13 @@ const (
 func main() {
 	jsonOutput := flag.Bool("json", false, "Output in JSON format")
 	waybarOutput := flag.Bool("waybar", false, "Output in waybar JSON format")
+	showVersion := flag.Bool("version", false, "Show version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("claude-usage %s\n", version.Version)
+		return
+	}
 
 	creds, err := credentials.Load()
 	if err != nil {
@@ -154,7 +161,10 @@ func outputWaybar(usage *api.UsageResponse) {
 	}
 
 	enc := json.NewEncoder(os.Stdout)
-	enc.Encode(output)
+	if err := enc.Encode(output); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding waybar output: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func outputWaybarError(msg string) {
@@ -165,7 +175,10 @@ func outputWaybarError(msg string) {
 		Percentage: 0,
 	}
 	enc := json.NewEncoder(os.Stdout)
-	enc.Encode(output)
+	if err := enc.Encode(output); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding waybar error output: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func outputPretty(usage *api.UsageResponse, tokenExpiresIn time.Duration) {

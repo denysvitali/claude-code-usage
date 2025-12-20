@@ -60,7 +60,7 @@ linters-settings:
       - performance
 
   goimports:
-    local-prefixes: github.com/dvitali/claude-code-usage
+    local-prefixes: github.com/denysvitali/claude-code-usage
 
   nakedret:
     max-func-lines: 30

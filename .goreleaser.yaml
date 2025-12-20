@@ -21,11 +21,12 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w
+      - -s -w -X github.com/denysvitali/claude-code-usage/internal/version.Version={{.Version}}
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -33,7 +34,8 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE
       - README.md
@@ -65,7 +67,7 @@ changelog:
 
 release:
   github:
-    owner: dvitali
+    owner: denysvitali
     name: claude-code-usage
   draft: false
   prerelease: auto

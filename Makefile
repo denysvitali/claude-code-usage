@@ -10,8 +10,11 @@ GOTEST := $(GOCMD) test
 GOMOD := $(GOCMD) mod
 GOFMT := gofmt
 
+# Version (can be overridden: make build VERSION=1.2.3)
+VERSION ?= dev
+
 # Build flags
-LDFLAGS := -s -w
+LDFLAGS := -s -w -X github.com/denysvitali/claude-code-usage/internal/version.Version=$(VERSION)
 
 # Default target
 all: lint test build
@@ -31,7 +34,7 @@ lint:
 ## fmt: Format code
 fmt:
 	$(GOFMT) -s -w .
-	goimports -w -local github.com/dvitali/claude-code-usage .
+	goimports -w -local github.com/denysvitali/claude-code-usage .
 
 ## tidy: Tidy and verify dependencies
 tidy:

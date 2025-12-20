@@ -6,12 +6,13 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/denysvitali/claude-code-usage/internal/version"
 )
 
 const (
 	baseURL       = "https://api.anthropic.com"
 	usageEndpoint = "/api/oauth/usage"
-	userAgent     = "claude-code-usage/1.0.0"
 	betaHeader    = "oauth-2025-04-20"
 )
 
@@ -41,7 +42,7 @@ func (c *Client) GetUsage() (*UsageResponse, error) {
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("User-Agent", "claude-code-usage/"+version.Version)
 	req.Header.Set("anthropic-beta", betaHeader)
 
 	resp, err := c.httpClient.Do(req)
