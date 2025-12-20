@@ -1,0 +1,103 @@
+version: "2"
+
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    # Default linters (explicitly enabled for clarity)
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Additional recommended linters
+    - bodyclose
+    - dogsled
+    - dupl
+    - errname
+    - errorlint
+    - exhaustive
+    - copyloopvar
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - gosec
+    - misspell
+    - nakedret
+    - nilerr
+    - noctx
+    - prealloc
+    - predeclared
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+
+  goimports:
+    local-prefixes: github.com/dvitali/claude-code-usage
+
+  nakedret:
+    max-func-lines: 30
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: indent-error-flow
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: var-declaration
+      - name: var-naming
+
+issues:
+  exclude-dirs-use-default: true
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Allow longer functions in main.go for CLI output
+    - path: main\.go
+      linters:
+        - gocognit
+
+    # Relax checks in test files
+    - path: _test\.go
+      linters:
+        - dupl
+        - goconst

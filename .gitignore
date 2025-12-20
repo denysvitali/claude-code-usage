@@ -1,0 +1,52 @@
+# Binaries
+claude-usage
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build output
+/dist/
+/bin/
+/out/
+
+# Test artifacts
+*.test
+*.out
+coverage.out
+coverage.html
+*.prof
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor (if used)
+/vendor/
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.credentials.json
+credentials.json
+
+# Temporary files
+*.tmp
+*.log
+tmp/

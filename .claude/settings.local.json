@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:docs.claude.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebSearch",
+      "WebFetch(domain:support.claude.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(go mod init:*)",
+      "Bash(go build:*)",
+      "Bash(go run:*)",
+      "Bash(golangci-lint run:*)",
+      "Bash(golangci-lint help:*)"
+    ]
+  }
+}
