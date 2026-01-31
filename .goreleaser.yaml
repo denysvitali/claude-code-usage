@@ -1,16 +1,16 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: claude-usage
+project_name: llm-usage
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - id: claude-usage
-    main: ./cmd/claude-usage
-    binary: claude-usage
+  - id: llm-usage
+    main: ./cmd/llm-usage
+    binary: llm-usage
     env:
       - CGO_ENABLED=0
     goos:
@@ -21,7 +21,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X github.com/denysvitali/claude-code-usage/internal/version.Version={{.Version}}
+      - -s -w -X github.com/denysvitali/llm-usage/internal/version.Version={{.Version}}
 
 archives:
   - id: default
@@ -51,7 +51,7 @@ changelog:
 release:
   github:
     owner: denysvitali
-    name: claude-code-usage
+    name: llm-usage
   draft: false
   prerelease: auto
   name_template: "v{{.Version}}"

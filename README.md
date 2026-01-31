@@ -1,61 +1,94 @@
-# claude-code-usage
+# llm-usage
 
-A CLI tool to display your Claude AI API usage statistics for Pro and Max subscriptions.
+A CLI tool to display your LLM API usage statistics across multiple providers (Claude, Kimi, Z.AI).
 
 ## Features
 
-- View real-time usage statistics from your Claude subscription
+- View real-time usage statistics from multiple LLM providers
 - Multiple output formats: pretty-printed, JSON, and Waybar-compatible
 - Visual progress bars showing usage utilization
 - Displays reset times for usage windows
+- Filter by provider or view all at once
 
 ## Prerequisites
 
-You must have the [Claude CLI](https://github.com/anthropics/claude-code) installed and authenticated. The tool reads OAuth credentials from `~/.claude/.credentials.json`, which is created when you run the `claude` command for the first time.
+For Claude usage, you must have the [Claude CLI](https://github.com/anthropics/claude-code) installed and authenticated.
 
 ## Installation
 
 ### From Source
 
 ```bash
-go install github.com/denysvitali/claude-code-usage/cmd/claude-usage@latest
+go install github.com/denysvitali/llm-usage@latest
 ```
 
 ### From Releases
 
-Download the appropriate binary for your platform from the [Releases](https://github.com/denysvitali/claude-code-usage/releases) page.
+Download the appropriate binary for your platform from the [Releases](https://github.com/denysvitali/llm-usage/releases) page.
 
 ## Usage
 
 ```bash
-# Pretty-printed output (default)
-claude-usage
+# Show all configured providers (default)
+llm-usage
+
+# Show specific provider
+llm-usage --provider=claude
+llm-usage --provider=kimi
+llm-usage --provider=zai
 
 # JSON output
-claude-usage --json
+llm-usage --json
 
 # Waybar-compatible JSON output
-claude-usage --waybar
+llm-usage --waybar
 
 # Show version
-claude-usage --version
+llm-usage --version
+```
+
+### Configuration
+
+Credentials are stored in `~/.llm-usage/` with separate files per provider:
+
+- `~/.llm-usage/claude.json` - Claude OAuth credentials
+- `~/.llm-usage/kimi.json` - Kimi API credentials
+- `~/.llm-usage/zai.json` - Z.AI API credentials
+
+#### Migrating from claude-code-usage
+
+```bash
+# Create the config directory
+mkdir -p ~/.llm-usage
+
+# Copy existing Claude credentials
+cp ~/.claude/.credentials.json ~/.llm-usage/claude.json
 ```
 
 ### Example Output
 
 ```
-Claude Usage (Pro/Max Subscription)
-====================================
+LLM Usage Statistics
+====================
 
-5-Hour Window:
-  Usage:    ████████████░░░░░░░░  60.0%
-  Resets:   in 2h 15m
+Claude (Pro/Max Subscription):
+--------------------------------
+  5-Hour Window:
+    Usage:    [████████████░░░░░░░░] 60.0%
+    Resets:   in 2h 15m
+  7-Day Window:
+    Usage:    [██████░░░░░░░░░░░░░░] 30.0%
+    Resets:   in 3d 5h
 
-7-Day Window:
-  Usage:    ██████░░░░░░░░░░░░░░  30.0%
-  Resets:   in 3d 5h
+Kimi:
+--------------------------------
+  Error: API not yet configured or not implemented
 
-Token expires: 23h 45m
+Z.AI:
+--------------------------------
+  Daily Usage:
+    Usage:    [████░░░░░░░░░░░░░░░] 20.0%
+    Limit:    1000000 tokens
 ```
 
 ### Waybar Integration
@@ -64,8 +97,8 @@ Add this to your Waybar config:
 
 ```json
 {
-  "custom/claude": {
-    "exec": "claude-usage --waybar",
+  "custom/llm-usage": {
+    "exec": "llm-usage --waybar",
     "return-type": "json",
     "interval": 300
   }
@@ -76,8 +109,8 @@ Add this to your Waybar config:
 
 ```bash
 # Clone the repository
-git clone https://github.com/denysvitali/claude-code-usage.git
-cd claude-code-usage
+git clone https://github.com/denysvitali/llm-usage.git
+cd llm-usage
 
 # Build
 make build
@@ -98,6 +131,14 @@ make test
 # Build and test everything
 make all
 ```
+
+## Supported Providers
+
+| Provider | Status | Notes |
+|----------|--------|-------|
+| Claude | ✅ Implemented | Requires Claude CLI OAuth credentials |
+| Kimi | 🔜 Planned | API endpoint identified, implementation pending |
+| Z.AI | 🔜 Planned | API endpoint identified, implementation pending |
 
 ## License
 

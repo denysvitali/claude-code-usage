@@ -1,5 +1,5 @@
-// Package anthropic provides the HTTP client for the Anthropic OAuth API.
-package anthropic
+// Package claude implements the Claude API provider for llm-usage.
+package claude
 
 import (
 	"context"
@@ -9,12 +9,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/denysvitali/claude-code-usage/internal/version"
+	"github.com/denysvitali/llm-usage/internal/version"
 )
 
 const (
 	baseURL       = "https://api.anthropic.com"
 	usageEndpoint = "/api/oauth/usage"
+	userAgent     = "llm-usage/1.0.0"
 	betaHeader    = "oauth-2025-04-20"
 )
 
@@ -47,7 +48,7 @@ func (c *Client) GetUsage() (*UsageResponse, error) {
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "claude-code-usage/"+version.Version)
+	req.Header.Set("User-Agent", "llm-usage/"+version.Version)
 	req.Header.Set("anthropic-beta", betaHeader)
 
 	resp, err := c.httpClient.Do(req)

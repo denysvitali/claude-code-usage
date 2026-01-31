@@ -1,4 +1,4 @@
-// Package credentials handles loading OAuth credentials from the Claude CLI.
+// Package credentials provides credential loading for LLM providers.
 package credentials
 
 import (
@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/denysvitali/claude-code-usage/internal/keychain"
+	"github.com/denysvitali/llm-usage/internal/keychain"
 )
 
 // Credentials represents the structure of ~/.claude/.credentials.json
