@@ -58,6 +58,21 @@
                     </button>
                 </template>
             </div>
+
+            <!-- Sort controls -->
+            <div class="mt-3 flex items-center gap-2">
+                <span class="text-sm text-gray-400">Sort by:</span>
+                <button @click="sortBy = 'name'"
+                        :class="sortBy === 'name' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
+                        class="px-3 py-1 rounded-full text-sm transition-colors">
+                    Name
+                </button>
+                <button @click="sortBy = 'usage'"
+                        :class="sortBy === 'usage' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
+                        class="px-3 py-1 rounded-full text-sm transition-colors">
+                    Usage
+                </button>
+            </div>
         </header>
 
         <!-- Error state -->
@@ -178,6 +193,7 @@
                 lastUpdated: null,
                 selectedProviders: ['all'],
                 availableProviders: [],
+                sortBy: 'name', // 'name' or 'usage'
 
                 init() {
                     this.loadProviders();
@@ -235,7 +251,25 @@
 
                 get filteredStats() {
                     if (!this.stats || !Array.isArray(this.stats.providers)) return [];
-                    return this.stats.providers;
+
+                    const providers = [...this.stats.providers];
+
+                    return providers.sort((a, b) => {
+                        if (this.sortBy === 'name') {
+                            const nameA = this.getProviderName(a.provider);
+                            const nameB = this.getProviderName(b.provider);
+                            if (nameA !== nameB) return nameA.localeCompare(nameB);
+                            // If same provider name, sort by account
+                            const accountA = a.extra?.account || '';
+                            const accountB = b.extra?.account || '';
+                            return accountA.localeCompare(accountB);
+                        } else if (this.sortBy === 'usage') {
+                            const usageA = this.getMaxUtilization(a);
+                            const usageB = this.getMaxUtilization(b);
+                            return usageB - usageA; // Highest usage first
+                        }
+                        return 0;
+                    });
                 },
 
                 getProviderName(id) {
