@@ -16,7 +16,7 @@ type Provider struct {
 	Name string
 }
 
-// All providers that can be configured
+// AllProviders contains all providers that can be configured.
 var AllProviders = []Provider{
 	{ID: "claude", Name: "Claude (Anthropic)"},
 	{ID: "kimi", Name: "Kimi"},
@@ -34,8 +34,7 @@ type Model struct {
 	selectedIdx int
 
 	// Input state
-	inputText      string
-	cursorPosition int
+	inputText string
 
 	// Selection state
 	selectedProvider string

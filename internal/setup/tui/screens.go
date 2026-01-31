@@ -61,7 +61,7 @@ func (m Model) viewProviderSelect() string {
 
 // updateAddAccountName handles updates for the account name input screen
 func (m Model) updateAddAccountName(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
+	switch msg.Type { //nolint:exhaustive
 	case tea.KeyEnter:
 		// Use default name if empty
 		accountName := m.inputText
@@ -147,7 +147,7 @@ func (m Model) viewAddAccountName() string {
 
 // updateAddAPIKey handles updates for the API key input screen
 func (m Model) updateAddAPIKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.Type {
+	switch msg.Type { //nolint:exhaustive
 	case tea.KeyEnter:
 		if m.inputText == "" {
 			m.errorMsg = "API key is required"
@@ -276,11 +276,12 @@ func (m Model) viewListAccounts() string {
 		b.WriteString("\n")
 
 		accounts, err := m.credsMgr.ListAccounts(providerID)
-		if err != nil {
+		switch {
+		case err != nil:
 			b.WriteString(normalStyle.Render("  (error loading accounts)"))
-		} else if len(accounts) == 0 {
+		case len(accounts) == 0:
 			b.WriteString(dimStyle.Render("  (no accounts configured)"))
-		} else {
+		default:
 			for _, acc := range accounts {
 				b.WriteString(normalStyle.Render("  • " + acc))
 				b.WriteString("\n")
@@ -293,7 +294,7 @@ func (m Model) viewListAccounts() string {
 }
 
 // updateListAccounts handles updates for the list accounts screen
-func (m Model) updateListAccounts(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateListAccounts(_ tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Any key goes back to main menu
 	return m.goBack()
 }

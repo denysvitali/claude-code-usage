@@ -2,6 +2,7 @@ package kimi
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,7 +48,7 @@ func (c *Client) GetUsage() (*UsageResponse, error) {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, baseURL+usageEndpoint, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+usageEndpoint, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -52,22 +52,8 @@ type errorMsg struct {
 	err error
 }
 
-// errorWrap wraps an error into an errorMsg
-func errorWrap(err error) tea.Cmd {
-	return func() tea.Msg {
-		return errorMsg{err: err}
-	}
-}
-
 // clearErrorMsg is a message to clear the current error
 type clearErrorMsg struct{}
-
-// clearError returns a command to clear the error
-func clearError() tea.Cmd {
-	return func() tea.Msg {
-		return clearErrorMsg{}
-	}
-}
 
 // returnToMainMenuMsg is a message to return to the main menu
 type returnToMainMenuMsg struct{}

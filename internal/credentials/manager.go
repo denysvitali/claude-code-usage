@@ -44,7 +44,7 @@ func (m *Manager) EnsureConfigDir() error {
 func (m *Manager) LoadProvider(providerID string, config ProviderConfig) error {
 	configPath := m.providerPath(providerID)
 
-	data, err := os.ReadFile(configPath)
+	data, err := os.ReadFile(configPath) //nolint:gosec
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("credentials file not found at %s", configPath)
@@ -428,7 +428,7 @@ func (m *Manager) MigrateFromClaudeCLI() error {
 	}
 
 	// Read old file
-	data, err := os.ReadFile(oldPath)
+	data, err := os.ReadFile(oldPath) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("failed to read old credentials: %w", err)
 	}

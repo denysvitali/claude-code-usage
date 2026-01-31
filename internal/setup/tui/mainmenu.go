@@ -94,7 +94,7 @@ func (m Model) viewFooter() string {
 		bindings = []string{"↑/k", "↓/j", "enter", "esc"}
 	}
 
-	var helpParts []string
+	helpParts := make([]string, 0, len(bindings))
 	for _, binding := range bindings {
 		helpParts = append(helpParts, dimStyle.Render(binding))
 	}

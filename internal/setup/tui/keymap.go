@@ -1,7 +1,15 @@
 // Package tui provides the Bubble Tea TUI for the setup wizard.
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+const (
+	keyDown   = "down"
+	keyEnter  = "enter"
+	keyUp     = "up"
+	keyEsc    = "esc"
+	keyLeft   = "left"
+	keyRight  = "right"
+	accountDefault = "default"
+)
 
 // KeyMap defines key bindings for the TUI
 type KeyMap struct {
@@ -62,20 +70,4 @@ func DefaultKeyMap() KeyMap {
 			help: "help",
 		},
 	}
-}
-
-// HelpView returns a formatted help view
-func (k KeyMap) HelpView(bindings ...keyBinding) string {
-	var helpItems []string
-	for _, b := range bindings {
-		helpItems = append(helpItems, lipgloss.NewStyle().
-			Foreground(dimColor).
-			Render(b.help))
-	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, helpItems...)
-}
-
-// ShortHelp returns short help for the footer
-func (k KeyMap) ShortHelp() []keyBinding {
-	return []keyBinding{k.Up, k.Down, k.Enter, k.Escape}
 }

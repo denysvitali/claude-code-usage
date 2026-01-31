@@ -16,13 +16,13 @@ func (m Model) updateRemoveProviderSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
 		}
-	case "down", "j":
+	case keyDown, "j":
 		// Only show providers that have accounts
 		availableProviders := m.getProvidersWithAccounts()
 		if m.selectedIdx < len(availableProviders)-1 {
 			m.selectedIdx++
 		}
-	case "enter":
+	case keyEnter:
 		availableProviders := m.getProvidersWithAccounts()
 		if len(availableProviders) == 0 {
 			m.errorMsg = "No providers configured"
@@ -105,11 +105,11 @@ func (m Model) updateRemoveAccountSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
 		}
-	case "down", "j":
+	case keyDown, "j":
 		if m.selectedIdx < len(m.accounts)-1 {
 			m.selectedIdx++
 		}
-	case "enter":
+	case keyEnter:
 		m.selectedAccount = m.accounts[m.selectedIdx]
 		return m.pushScreen(screenRemoveConfirm), nil
 	}
@@ -154,20 +154,19 @@ func (m Model) viewRemoveAccountSelect() string {
 // updateRemoveConfirm handles updates for the remove confirmation screen
 func (m Model) updateRemoveConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "left", "h":
+	case keyLeft, "h":
 		m.confirmRemove = false
-	case "right", "l":
+	case keyRight, "l":
 		m.confirmRemove = true
 	case "up", "k":
 		m.confirmRemove = !m.confirmRemove
-	case "down", "j":
+	case keyDown, "j":
 		m.confirmRemove = !m.confirmRemove
-	case "enter":
+	case keyEnter:
 		if m.confirmRemove {
 			return m.doRemoveAccount()
-		} else {
-			return m.goBack()
 		}
+		return m.goBack()
 	}
 	return m, nil
 }
@@ -184,7 +183,7 @@ func (m Model) doRemoveAccount() (tea.Model, tea.Cmd) {
 		} else {
 			// Handle legacy format (single ClaudeAiOauth field)
 			if creds.Accounts == nil {
-				if creds.ClaudeAiOauth != nil && m.selectedAccount == "default" {
+				if creds.ClaudeAiOauth != nil && m.selectedAccount == accountDefault {
 					// Delete the entire provider file for legacy format
 					err = m.credsMgr.DeleteProvider("claude")
 				} else {

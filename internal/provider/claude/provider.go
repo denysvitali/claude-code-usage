@@ -1,8 +1,9 @@
 package claude
 
 import (
-	"github.com/denysvitali/llm-usage/internal/provider"
 	"time"
+
+	"github.com/denysvitali/llm-usage/internal/provider"
 )
 
 // Provider implements the provider.Provider interface for Claude

@@ -21,7 +21,6 @@ var (
 	inputFocusColor = lipgloss.Color("117") // Light blue
 
 	// Background colors
-	bgColor     = lipgloss.Color("235")
 	borderColor = lipgloss.Color("238")
 )
 
@@ -75,30 +74,6 @@ var (
 	inputPlaceholderStyle = lipgloss.NewStyle().
 				Foreground(dimColor)
 
-	// Border style
-	borderStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Padding(0, 1)
-
-	// Box style
-	boxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(borderColor).
-			Padding(1, 2).
-			MarginBottom(1)
-
-	// Header style
-	headerStyle = lipgloss.NewStyle().
-			Foreground(titleColor).
-			Bold(true).
-			Underline(true)
-
-	// Help style
-	helpStyle = lipgloss.NewStyle().
-			Foreground(dimColor).
-			MarginTop(1)
-
 	// Separator style
 	separatorStyle = lipgloss.NewStyle().
 			Foreground(borderColor)
@@ -108,34 +83,11 @@ var (
 			Foreground(titleColor).
 			Bold(true)
 
-	// Account name style
-	accountStyle = lipgloss.NewStyle().
-			Foreground(mutedColor)
-
 	// Warning style
 	warningStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("214")). // Orange
 			Bold(true)
 )
-
-// Width and height constraints
-func getStyles(width int) (title, subtitle, content, help lipgloss.Style) {
-	// Constrain content width based on terminal size
-	contentWidth := min(80, width-4)
-
-	return lipgloss.NewStyle().
-			Width(contentWidth).
-			Align(lipgloss.Center),
-		lipgloss.NewStyle().
-			Width(contentWidth).
-			Align(lipgloss.Center),
-		lipgloss.NewStyle().
-			Width(contentWidth).
-			Align(lipgloss.Left),
-		lipgloss.NewStyle().
-			Width(contentWidth).
-			Align(lipgloss.Center)
-}
 
 // RenderCursor returns the cursor indicator
 func RenderCursor(isActive bool) string {
@@ -156,15 +108,16 @@ func RenderMenuItem(label string, isActive bool) string {
 // RenderInputField returns a styled input field
 func RenderInputField(label, value, placeholder string, isActive, isPassword bool) string {
 	var renderedValue string
-	if isPassword && value != "" {
+	switch {
+	case isPassword && value != "":
 		renderedValue = strings.Repeat("*", len(value))
-	} else if value == "" {
+	case value == "":
 		renderedValue = inputPlaceholderStyle.Render(placeholder)
-	} else {
+	default:
 		renderedValue = inputFieldStyle.Render(value)
 	}
 
-	prefix := ""
+	var prefix string
 	if isActive {
 		prefix = cursorStyle.Render("▶ ")
 	} else {
