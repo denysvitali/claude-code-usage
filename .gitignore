@@ -1,5 +1,5 @@
 # Binaries
-claude-usage
+llm-usage
 *.exe
 *.exe~
 *.dll
@@ -50,3 +50,5 @@ credentials.json
 *.tmp
 *.log
 tmp/
+
+.claude/settings.local.json

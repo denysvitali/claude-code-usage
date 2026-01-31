@@ -1,4 +1,4 @@
-package api
+package claude
 
 import "time"
 

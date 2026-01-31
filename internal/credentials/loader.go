@@ -1,3 +1,4 @@
+// Package credentials provides credential loading for LLM providers.
 package credentials
 
 import (

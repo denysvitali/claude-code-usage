@@ -1,7 +1,7 @@
 .PHONY: all build test lint clean install release snapshot fmt tidy coverage help
 
 # Binary name
-BINARY := claude-usage
+BINARY := llm-usage
 
 # Go parameters
 GOCMD := go
@@ -18,7 +18,7 @@ all: lint test build
 
 ## build: Build the binary
 build:
-	$(GOBUILD) -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/claude-usage
+	$(GOBUILD) -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/llm-usage
 
 ## test: Run tests with race detection
 test:
@@ -31,7 +31,7 @@ lint:
 ## fmt: Format code
 fmt:
 	$(GOFMT) -s -w .
-	goimports -w -local github.com/dvitali/claude-code-usage .
+	goimports -w -local github.com/dvitali/llm-usage .
 
 ## tidy: Tidy and verify dependencies
 tidy:
@@ -46,7 +46,7 @@ clean:
 
 ## install: Install binary to GOPATH/bin
 install:
-	$(GOCMD) install ./cmd/claude-usage
+	$(GOCMD) install ./cmd/llm-usage
 
 ## snapshot: Create a snapshot release (for testing)
 snapshot:

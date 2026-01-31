@@ -1,4 +1,5 @@
-package api
+// Package claude implements the Claude API provider for llm-usage.
+package claude
 
 import (
 	"encoding/json"
@@ -11,7 +12,7 @@ import (
 const (
 	baseURL       = "https://api.anthropic.com"
 	usageEndpoint = "/api/oauth/usage"
-	userAgent     = "claude-code-usage/1.0.0"
+	userAgent     = "llm-usage/1.0.0"
 	betaHeader    = "oauth-2025-04-20"
 )
 
