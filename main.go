@@ -20,6 +20,33 @@ import (
 	setuptui "github.com/dvitali/llm-usage/internal/setup/tui"
 )
 
+// loadClaudeFromKeychain tries to load Claude credentials from the CLI keychain location
+func loadClaudeFromKeychain() (*credentials.OAuthCredentials, string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil, "", err
+	}
+
+	credPath := homeDir + "/.claude/.credentials.json"
+	data, err := os.ReadFile(credPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var result struct {
+		ClaudeAiOauth *credentials.OAuthCredentials `json:"claudeAiOauth"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, "", err
+	}
+
+	if result.ClaudeAiOauth == nil || result.ClaudeAiOauth.AccessToken == "" {
+		return nil, "", fmt.Errorf("no valid credentials in keychain")
+	}
+
+	return result.ClaudeAiOauth, "default", nil
+}
+
 const (
 	barWidth = 20
 	barFull  = "█"
@@ -198,15 +225,50 @@ func getProviders(providerFlag, accountFlag string, allAccounts bool, credsMgr *
 		pid = strings.TrimSpace(pid)
 		switch pid {
 		case "claude":
-			creds, err := credsMgr.LoadClaude()
-			if err != nil {
-				// Provider not configured, skip it
+			// Try loading from keychain first (Claude CLI location)
+			keychainCreds, keychainAccount, keychainErr := loadClaudeFromKeychain()
+
+			// Also try loading from the new multi-account location
+			multiCreds, multiErr := credsMgr.LoadClaude()
+
+			// Determine which source to use
+			if keychainErr != nil && multiErr != nil {
+				// Neither source available, skip
 				continue
 			}
-			if allAccounts || accountFlag == "" {
-				// Add all accounts when --all-accounts is set or no specific account requested
-				for _, accName := range creds.ListAccounts() {
-					oauth := creds.GetAccount(accName)
+
+			// If a specific account is requested, only use the multi-account location
+			if accountFlag != "" {
+				if multiErr != nil {
+					continue
+				}
+				oauth := multiCreds.GetAccount(accountFlag)
+				if oauth == nil || claude.IsExpired(oauth.ExpiresAt) {
+					continue
+				}
+				providers = append(providers, ProviderInstance{
+					Provider:    claude.NewProvider(oauth.AccessToken),
+					AccountName: accountFlag,
+				})
+				continue
+			}
+
+			// No specific account requested - show all available
+			// Add from keychain if available
+			if keychainErr == nil && !claude.IsExpired(keychainCreds.ExpiresAt) {
+				providers = append(providers, ProviderInstance{
+					Provider:    claude.NewProvider(keychainCreds.AccessToken),
+					AccountName: keychainAccount,
+				})
+			}
+			// Add from multi-account location if available
+			if multiErr == nil {
+				for _, accName := range multiCreds.ListAccounts() {
+					// Skip if this was already added from keychain
+					if keychainErr == nil && accName == "default" {
+						continue
+					}
+					oauth := multiCreds.GetAccount(accName)
 					if oauth == nil || claude.IsExpired(oauth.ExpiresAt) {
 						continue
 					}
@@ -215,19 +277,6 @@ func getProviders(providerFlag, accountFlag string, allAccounts bool, credsMgr *
 						AccountName: accName,
 					})
 				}
-			} else {
-				// Use specified account
-				oauth := creds.GetAccount(accountFlag)
-				if oauth == nil {
-					continue
-				}
-				if claude.IsExpired(oauth.ExpiresAt) {
-					continue
-				}
-				providers = append(providers, ProviderInstance{
-					Provider:    claude.NewProvider(oauth.AccessToken),
-					AccountName: accountFlag,
-				})
 			}
 		case "kimi":
 			creds, err := credsMgr.LoadKimi()
