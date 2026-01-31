@@ -21,7 +21,7 @@ all: lint test build
 
 ## build: Build the binary
 build:
-	$(GOBUILD) -ldflags="$(LDFLAGS)" -o $(BINARY) ./cmd/llm-usage
+	$(GOBUILD) -ldflags="$(LDFLAGS)" -o $(BINARY) ./
 
 ## test: Run tests with race detection
 test:
@@ -49,7 +49,7 @@ clean:
 
 ## install: Install binary to GOPATH/bin
 install:
-	$(GOCMD) install ./cmd/llm-usage
+	$(GOCMD) install ./
 
 ## snapshot: Create a snapshot release (for testing)
 snapshot:
