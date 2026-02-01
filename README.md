@@ -49,20 +49,22 @@ llm-usage --version
 
 ### Configuration
 
-Credentials are stored in `~/.llm-usage/` with separate files per provider:
+Credentials are stored following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html):
 
-- `~/.llm-usage/claude.json` - Claude OAuth credentials
-- `~/.llm-usage/kimi.json` - Kimi API credentials
-- `~/.llm-usage/zai.json` - Z.AI API credentials
+- `$XDG_CONFIG_HOME/llm-usage/claude.json` - Claude OAuth credentials
+- `$XDG_CONFIG_HOME/llm-usage/kimi.json` - Kimi API credentials
+- `$XDG_CONFIG_HOME/llm-usage/zai.json` - Z.AI API credentials
+
+On Linux/macOS, `$XDG_CONFIG_HOME` defaults to `~/.config` if not set.
 
 #### Migrating from claude-code-usage
 
 ```bash
 # Create the config directory
-mkdir -p ~/.llm-usage
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/llm-usage"
 
 # Copy existing Claude credentials
-cp ~/.claude/.credentials.json ~/.llm-usage/claude.json
+cp ~/.claude/.credentials.json "${XDG_CONFIG_HOME:-$HOME/.config}/llm-usage/claude.json"
 ```
 
 ### Example Output

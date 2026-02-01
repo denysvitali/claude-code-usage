@@ -53,7 +53,7 @@ make snapshot
 ```
 internal/
 ├── credentials/     # Credential management (multi-account support)
-│   ├── loader.go    # Loads provider credentials from ~/.llm-usage/
+│   ├── loader.go    # Loads provider credentials from $XDG_CONFIG_HOME/llm-usage/
 │   └── manager.go   # Manages credential storage and retrieval
 ├── keychain/        # Platform-specific secure storage
 │   ├── keychain_darwin.go     # macOS implementation
@@ -88,7 +88,7 @@ All providers implement this interface and return a `Usage` struct with:
 
 ### Credential Management
 
-Credentials are stored in `~/.llm-usage/` as JSON files:
+Credentials are stored in `$XDG_CONFIG_HOME/llm-usage/` (defaults to `~/.config/llm-usage/`) as JSON files:
 - `claude.json` - OAuth credentials (multi-account support)
 - `kimi.json` - API key credentials (multi-account support)
 - `zai.json` - API key credentials (multi-account support)

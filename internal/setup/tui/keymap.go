@@ -2,12 +2,12 @@
 package tui
 
 const (
-	keyDown   = "down"
-	keyEnter  = "enter"
-	keyUp     = "up"
-	keyEsc    = "esc"
-	keyLeft   = "left"
-	keyRight  = "right"
+	keyDown        = "down"
+	keyEnter       = "enter"
+	keyUp          = "up"
+	keyEsc         = "esc"
+	keyLeft        = "left"
+	keyRight       = "right"
 	accountDefault = "default"
 )
 

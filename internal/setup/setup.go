@@ -74,7 +74,7 @@ func addClaudeAccount(mgr *credentials.Manager, _ string) error {
 	fmt.Println("2. Run the migration command to copy your credentials:")
 	fmt.Println("   llm-usage setup migrate-claude")
 	fmt.Println()
-	fmt.Println("Or manually copy ~/.claude/.credentials.json to ~/.llm-usage/claude.json")
+	fmt.Println("Or manually copy ~/.claude/.credentials.json to $XDG_CONFIG_HOME/llm-usage/claude.json")
 	fmt.Println()
 
 	// Check if they want to migrate now

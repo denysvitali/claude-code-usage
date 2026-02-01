@@ -209,7 +209,7 @@ func (m Model) doRemoveAccount() (tea.Model, tea.Cmd) {
 		} else {
 			// Handle legacy format (single APIKey field)
 			if creds.Accounts == nil {
-				if creds.APIKey != "" && m.selectedAccount == "default" {
+				if creds.APIKey != "" && m.selectedAccount == accountDefault {
 					// Delete the entire provider file for legacy format
 					err = m.credsMgr.DeleteProvider("kimi")
 				} else {
@@ -235,7 +235,7 @@ func (m Model) doRemoveAccount() (tea.Model, tea.Cmd) {
 		} else {
 			// Handle legacy format (single APIKey field)
 			if creds.Accounts == nil {
-				if creds.APIKey != "" && m.selectedAccount == "default" {
+				if creds.APIKey != "" && m.selectedAccount == accountDefault {
 					// Delete the entire provider file for legacy format
 					err = m.credsMgr.DeleteProvider("zai")
 				} else {

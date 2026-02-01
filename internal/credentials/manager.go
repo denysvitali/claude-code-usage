@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/adrg/xdg"
 )
 
 // ProviderConfig is the interface for provider-specific credential configs
@@ -15,18 +17,13 @@ type ProviderConfig interface {
 
 // Manager handles loading credentials for multiple providers
 type Manager struct {
-	configDir string // ~/.llm-usage/
+	configDir string // $XDG_CONFIG_HOME/llm-usage (defaults to ~/.config/llm-usage)
 }
 
 // NewManager creates a new credential manager
 func NewManager() *Manager {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		// Fallback to current directory if we can't get home dir
-		return &Manager{configDir: ".llm-usage"}
-	}
 	return &Manager{
-		configDir: filepath.Join(homeDir, ".llm-usage"),
+		configDir: filepath.Join(xdg.ConfigHome, "llm-usage"),
 	}
 }
 
