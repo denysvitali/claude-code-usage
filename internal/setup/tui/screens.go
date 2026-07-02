@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/denysvitali/llm-usage/internal/credentials"
+	"github.com/denysvitali/llm-usage/internal/setup"
 )
 
 // updateProviderSelect handles updates for the provider selection screen
@@ -23,15 +24,9 @@ func (m Model) updateProviderSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		provider := AllProviders[m.selectedIdx]
 		// Claude requires special handling (OAuth)
-		if provider.ID == "claude" {
+		if provider.ID == credentials.ProviderClaude {
 			m.selectedProvider = provider.ID
 			m.errorMsg = "Claude uses OAuth. Please run: llm-usage setup add claude"
-			return m, nil
-		}
-		// MiniMax requires multiple fields (cookie + group ID)
-		if provider.ID == "minimax" {
-			m.selectedProvider = provider.ID
-			m.errorMsg = "MiniMax requires multiple fields. Please run: llm-usage setup add minimax"
 			return m, nil
 		}
 		m.selectedProvider = provider.ID
@@ -78,9 +73,13 @@ func (m Model) updateAddAccountName(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.errorMsg = err.Error()
 			return m, nil
 		}
-		// Save the account name and clear inputText for the API key screen
+		// Save the account name and clear inputText for the next screen
 		m.accountName = accountName
-		m.inputText = "" // Clear for API key input
+		m.inputText = ""
+		// MiniMax needs a group ID before the cookie
+		if m.selectedProvider == credentials.ProviderMiniMax {
+			return m.pushScreen(screenAddGroupID), nil
+		}
 		return m.pushScreen(screenAddAPIKey), nil
 	case tea.KeyBackspace:
 		if len(m.inputText) > 0 {
@@ -150,12 +149,60 @@ func (m Model) viewAddAccountName() string {
 	return b.String()
 }
 
+// updateAddGroupID handles updates for the MiniMax group ID input screen
+func (m Model) updateAddGroupID(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type { //nolint:exhaustive
+	case tea.KeyEnter:
+		if m.inputText == "" {
+			m.errorMsg = "group ID is required"
+			return m, nil
+		}
+		m.groupID = m.inputText
+		m.inputText = "" // Clear for the cookie input
+		return m.pushScreen(screenAddAPIKey), nil
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		if len(m.inputText) > 0 {
+			m.inputText = m.inputText[:len(m.inputText)-1]
+		}
+	default:
+		if len(msg.Runes) > 0 {
+			m.inputText += string(msg.Runes)
+		}
+	}
+	return m, nil
+}
+
+// viewAddGroupID renders the MiniMax group ID input screen
+func (m Model) viewAddGroupID() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("Add MiniMax Account"))
+	b.WriteString("\n\n")
+	b.WriteString(normalStyle.Render("Enter your MiniMax Group ID"))
+	b.WriteString("\n\n")
+
+	cursor := cursorStyle.Render("▶")
+	input := m.inputText
+	if input == "" {
+		input = dimStyle.Render("(empty)")
+	} else {
+		input = inputFieldStyle.Render(input)
+	}
+	b.WriteString(cursor + " Group ID: " + input + "_")
+
+	if m.errorMsg != "" {
+		b.WriteString("\n\n" + RenderError(m.errorMsg))
+	}
+
+	return b.String()
+}
+
 // updateAddAPIKey handles updates for the API key input screen
 func (m Model) updateAddAPIKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.Type { //nolint:exhaustive
 	case tea.KeyEnter:
 		if m.inputText == "" {
-			m.errorMsg = "API key is required"
+			m.errorMsg = m.secretLabel() + " is required"
 			return m, nil
 		}
 		// Save the account
@@ -178,33 +225,22 @@ func (m Model) updateAddAPIKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// saveAccount saves the account credentials
-func (m Model) saveAccount() (tea.Model, tea.Cmd) {
-	accountName := m.accountName
-	apiKey := m.inputText
-	var err error
+// secretLabel returns the label for the secret input of the selected provider
+func (m Model) secretLabel() string {
+	if m.selectedProvider == credentials.ProviderMiniMax {
+		return "Cookie"
+	}
+	return "API key"
+}
 
+// saveAccount saves the account credentials via the shared setup save path
+func (m Model) saveAccount() (tea.Model, tea.Cmd) {
+	var err error
 	switch m.selectedProvider {
-	case "kimi":
-		var creds credentials.KimiCredentials
-		if m.credsMgr.ProviderExists("kimi") {
-			_ = m.credsMgr.LoadProvider("kimi", &creds)
-		}
-		if creds.Accounts == nil {
-			creds.Accounts = make(map[string]*credentials.KimiAccount)
-		}
-		creds.Accounts[accountName] = &credentials.KimiAccount{APIKey: apiKey}
-		err = m.credsMgr.SaveProvider("kimi", creds)
-	case "zai":
-		var creds credentials.ZAiCredentials
-		if m.credsMgr.ProviderExists("zai") {
-			_ = m.credsMgr.LoadProvider("zai", &creds)
-		}
-		if creds.Accounts == nil {
-			creds.Accounts = make(map[string]*credentials.ZAiAccount)
-		}
-		creds.Accounts[accountName] = &credentials.ZAiAccount{APIKey: apiKey}
-		err = m.credsMgr.SaveProvider("zai", creds)
+	case credentials.ProviderKimi, credentials.ProviderZAi:
+		err = setup.SaveAPIKeyAccount(m.credsMgr, m.selectedProvider, m.accountName, m.inputText)
+	case credentials.ProviderMiniMax:
+		err = setup.SaveMiniMaxAccount(m.credsMgr, m.accountName, m.inputText, m.groupID)
 	default:
 		err = fmt.Errorf("unsupported provider: %s", m.selectedProvider)
 	}
@@ -214,7 +250,7 @@ func (m Model) saveAccount() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.successMsg = fmt.Sprintf("Successfully added %s account '%s'", m.selectedProvider, accountName)
+	m.successMsg = fmt.Sprintf("Successfully added %s account '%s'", m.selectedProvider, m.accountName)
 	m.screen = screenSuccess
 	return m, nil
 }
@@ -233,18 +269,18 @@ func (m Model) viewAddAPIKey() string {
 
 	b.WriteString(titleStyle.Render(fmt.Sprintf("Add %s Account", providerName)))
 	b.WriteString("\n\n")
-	b.WriteString(normalStyle.Render("Enter your API key"))
+	b.WriteString(normalStyle.Render("Enter your " + m.secretLabel()))
 	b.WriteString("\n\n")
 
 	cursor := cursorStyle.Render("▶")
-	// Mask the API key for display
+	// Mask the secret for display
 	maskedKey := strings.Repeat("*", len(m.inputText))
 	if maskedKey == "" {
 		maskedKey = dimStyle.Render("(empty)")
 	} else {
 		maskedKey = inputFieldStyle.Render(maskedKey)
 	}
-	b.WriteString(cursor + " API Key: " + maskedKey + "_")
+	b.WriteString(cursor + " " + m.secretLabel() + ": " + maskedKey + "_")
 
 	if m.errorMsg != "" {
 		b.WriteString("\n\n" + RenderError(m.errorMsg))

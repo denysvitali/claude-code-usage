@@ -2,6 +2,7 @@
 package usage
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -14,10 +15,12 @@ import (
 )
 
 const (
-	providerClaude  = "claude"
-	providerKimi    = "kimi"
-	providerZAi     = "zai"
-	providerMiniMax = "minimax"
+	providerClaude  = credentials.ProviderClaude
+	providerKimi    = credentials.ProviderKimi
+	providerZAi     = credentials.ProviderZAi
+	providerMiniMax = credentials.ProviderMiniMax
+
+	defaultAccountName = credentials.DefaultAccountName
 )
 
 // ProviderInstance holds a provider instance along with its account info
@@ -34,45 +37,134 @@ func LoadClaudeFromKeychain() (*credentials.OAuthCredentials, string, error) {
 		return nil, "", err
 	}
 
-	return creds.ClaudeAiOauth, "default", nil
+	return creds.ClaudeAiOauth, defaultAccountName, nil
 }
 
-// GetProviders returns the list of providers to query based on the flags
-func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, credsMgr *credentials.Manager) []ProviderInstance {
-	var providerIDs []string
+// metadataProviders holds zero-credential provider instances, used only to
+// access display metadata (Name, ShortName) through the Provider interface.
+var metadataProviders = map[string]provider.Provider{
+	providerClaude:  claude.NewProvider("", false),
+	providerKimi:    kimi.NewProvider(""),
+	providerZAi:     zai.NewProvider(""),
+	providerMiniMax: minimax.NewProvider("", ""),
+}
 
-	if providerFlag == "all" || providerFlag == "" {
+// ProviderName returns the display name for a provider ID.
+func ProviderName(id string) string {
+	if p, ok := metadataProviders[id]; ok {
+		return p.Name()
+	}
+	return strings.ToUpper(id)
+}
+
+// ProviderShortName returns the compact label for a provider ID.
+func ProviderShortName(id string) string {
+	if p, ok := metadataProviders[id]; ok {
+		return p.ShortName()
+	}
+	return strings.ToUpper(id)[:1]
+}
+
+// failure creates a Usage error entry, tagging the account name if provided.
+func failure(providerID, accountName string, err error) provider.Usage {
+	u := provider.NewUsageError(providerID, ProviderName(providerID), err)
+	if accountName != "" {
+		u.Extra = map[string]any{"account": accountName}
+	}
+	return *u
+}
+
+// GetProviders returns the list of providers to query based on the flags,
+// along with pre-failed usage entries for providers that could not be loaded
+// (expired tokens, missing accounts, malformed credentials, unknown providers).
+func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+	var providerIDs []string
+	explicit := providerFlag != "all" && providerFlag != ""
+
+	if explicit {
+		providerIDs = strings.Split(providerFlag, ",")
+	} else {
 		// Show all configured providers
 		providerIDs = credsMgr.ListAvailable()
 		// If no providers are configured, default to claude
 		if len(providerIDs) == 0 {
 			providerIDs = []string{providerClaude}
 		}
-	} else {
-		providerIDs = strings.Split(providerFlag, ",")
 	}
 
 	var providers []ProviderInstance
+	var failures []provider.Usage
 	for _, pid := range providerIDs {
 		pid = strings.TrimSpace(pid)
 		switch pid {
 		case providerClaude:
-			providers = append(providers, getClaudeProviders(accountFlag, debug, credsMgr)...)
+			p, f := getClaudeProviders(accountFlag, debug, explicit, credsMgr)
+			providers = append(providers, p...)
+			failures = append(failures, f...)
 		case providerKimi:
-			providers = append(providers, getKimiProviders(accountFlag, allAccounts, credsMgr)...)
+			p, f := getKimiProviders(accountFlag, allAccounts, credsMgr)
+			providers = append(providers, p...)
+			failures = append(failures, f...)
 		case providerZAi:
-			providers = append(providers, getZaiProviders(accountFlag, allAccounts, credsMgr)...)
+			p, f := getZaiProviders(accountFlag, allAccounts, credsMgr)
+			providers = append(providers, p...)
+			failures = append(failures, f...)
 		case providerMiniMax:
-			providers = append(providers, getMiniMaxProviders(accountFlag, allAccounts, credsMgr)...)
+			p, f := getMiniMaxProviders(accountFlag, allAccounts, credsMgr)
+			providers = append(providers, p...)
+			failures = append(failures, f...)
+		default:
+			failures = append(failures, failure(pid, "",
+				fmt.Errorf("unknown provider %q (valid: claude, kimi, zai, minimax)", pid)))
 		}
 	}
 
-	return providers
+	return providers, failures
+}
+
+// freshClaudeToken returns valid OAuth credentials for an account, refreshing
+// (and persisting) them if the access token has expired.
+func freshClaudeToken(oauth *credentials.OAuthCredentials, accountName string, creds *credentials.ClaudeCredentials, credsMgr *credentials.Manager) (*credentials.OAuthCredentials, error) {
+	if !claude.IsExpired(oauth.ExpiresAt) {
+		return oauth, nil
+	}
+	if oauth.RefreshToken == "" {
+		return nil, fmt.Errorf("access token expired and no refresh token available - run 'llm-usage setup migrate-claude' or 'llm-usage setup add claude'")
+	}
+
+	refreshed, err := claude.RefreshAccessToken(oauth.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("access token expired and refresh failed: %w", err)
+	}
+
+	oauth.AccessToken = refreshed.AccessToken
+	if refreshed.RefreshToken != "" {
+		oauth.RefreshToken = refreshed.RefreshToken
+	}
+	oauth.ExpiresAt = refreshed.ExpiresAt
+
+	// Persist the refreshed token back to the per-provider credentials file
+	// (skip when credentials come from a read-only combined file).
+	if !credsMgr.UsesCombinedFile() {
+		if creds.Accounts != nil {
+			if acc, ok := creds.Accounts[accountName]; ok && acc != nil {
+				acc.AccessToken = oauth.AccessToken
+				acc.RefreshToken = oauth.RefreshToken
+				acc.ExpiresAt = oauth.ExpiresAt
+			}
+		} else if creds.ClaudeAiOauth != nil {
+			creds.ClaudeAiOauth = oauth
+		}
+		_ = credsMgr.SaveProvider(providerClaude, creds)
+	}
+
+	return oauth, nil
 }
 
 // getClaudeProviders returns Claude provider instances
-func getClaudeProviders(accountFlag string, debug bool, credsMgr *credentials.Manager) []ProviderInstance {
+func getClaudeProviders(accountFlag string, debug, explicit bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
 	var providers []ProviderInstance
+	var failures []provider.Usage
 
 	// Try loading from keychain first (Claude CLI location)
 	keychainCreds, keychainAccount, keychainErr := LoadClaudeFromKeychain()
@@ -80,45 +172,69 @@ func getClaudeProviders(accountFlag string, debug bool, credsMgr *credentials.Ma
 	// Also try loading from the new multi-account location
 	multiCreds, multiErr := credsMgr.LoadClaude()
 
-	// Determine which source to use
+	// Neither source available
 	if keychainErr != nil && multiErr != nil {
-		// Neither source available, skip
-		return providers
+		if explicit {
+			failures = append(failures, failure(providerClaude, "",
+				fmt.Errorf("no credentials found - run 'llm-usage setup': %w", multiErr)))
+		}
+		return providers, failures
 	}
 
 	// If a specific account is requested, only use the multi-account location
 	if accountFlag != "" {
 		if multiErr != nil {
-			return providers
+			failures = append(failures, failure(providerClaude, accountFlag, multiErr))
+			return providers, failures
 		}
 		oauth := multiCreds.GetAccount(accountFlag)
-		if oauth == nil || claude.IsExpired(oauth.ExpiresAt) {
-			return providers
+		if oauth == nil {
+			failures = append(failures, failure(providerClaude, accountFlag,
+				fmt.Errorf("account %q not found", accountFlag)))
+			return providers, failures
+		}
+		oauth, err := freshClaudeToken(oauth, accountFlag, multiCreds, credsMgr)
+		if err != nil {
+			failures = append(failures, failure(providerClaude, accountFlag, err))
+			return providers, failures
 		}
 		providers = append(providers, ProviderInstance{
 			Provider:    claude.NewProvider(oauth.AccessToken, debug),
 			AccountName: accountFlag,
 		})
-		return providers
+		return providers, failures
 	}
 
 	// No specific account requested - show all available
 	// Add from keychain if available
-	if keychainErr == nil && !claude.IsExpired(keychainCreds.ExpiresAt) {
-		providers = append(providers, ProviderInstance{
-			Provider:    claude.NewProvider(keychainCreds.AccessToken, debug),
-			AccountName: keychainAccount,
-		})
+	keychainAdded := false
+	if keychainErr == nil {
+		if claude.IsExpired(keychainCreds.ExpiresAt) {
+			// The Claude CLI owns these credentials; don't rotate its refresh token.
+			failures = append(failures, failure(providerClaude, keychainAccount,
+				fmt.Errorf("token from the Claude CLI expired - run 'claude' to re-authenticate")))
+		} else {
+			providers = append(providers, ProviderInstance{
+				Provider:    claude.NewProvider(keychainCreds.AccessToken, debug),
+				AccountName: keychainAccount,
+			})
+			keychainAdded = true
+		}
 	}
 	// Add from multi-account location if available
 	if multiErr == nil {
 		for _, accName := range multiCreds.ListAccounts() {
 			// Skip if this was already added from keychain
-			if keychainErr == nil && accName == "default" {
+			if keychainAdded && accName == defaultAccountName {
 				continue
 			}
 			oauth := multiCreds.GetAccount(accName)
-			if oauth == nil || claude.IsExpired(oauth.ExpiresAt) {
+			if oauth == nil {
+				continue
+			}
+			oauth, err := freshClaudeToken(oauth, accName, multiCreds, credsMgr)
+			if err != nil {
+				failures = append(failures, failure(providerClaude, accName, err))
 				continue
 			}
 			providers = append(providers, ProviderInstance{
@@ -128,115 +244,82 @@ func getClaudeProviders(accountFlag string, debug bool, credsMgr *credentials.Ma
 		}
 	}
 
-	return providers
+	return providers, failures
+}
+
+// getAccountProviders builds provider instances for account-based providers.
+// build must return nil when the account does not exist.
+func getAccountProviders[C any](
+	providerID, accountFlag string, allAccounts bool,
+	load func() (C, error),
+	list func(C) []string,
+	build func(C, string) provider.Provider,
+) ([]ProviderInstance, []provider.Usage) {
+	creds, err := load()
+	if err != nil {
+		return nil, []provider.Usage{failure(providerID, "", err)}
+	}
+
+	if allAccounts || accountFlag == "" {
+		// Add all accounts when --all-accounts is set or no specific account requested
+		var providers []ProviderInstance
+		for _, accName := range list(creds) {
+			if p := build(creds, accName); p != nil {
+				providers = append(providers, ProviderInstance{Provider: p, AccountName: accName})
+			}
+		}
+		return providers, nil
+	}
+
+	// Use specified account
+	p := build(creds, accountFlag)
+	if p == nil {
+		return nil, []provider.Usage{failure(providerID, accountFlag,
+			fmt.Errorf("account %q not found", accountFlag))}
+	}
+	return []ProviderInstance{{Provider: p, AccountName: accountFlag}}, nil
 }
 
 // getKimiProviders returns Kimi provider instances
-func getKimiProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) []ProviderInstance {
-	var providers []ProviderInstance
-
-	creds, err := credsMgr.LoadKimi()
-	if err != nil {
-		return providers
-	}
-
-	if allAccounts || accountFlag == "" {
-		// Add all accounts when --all-accounts is set or no specific account requested
-		for _, accName := range creds.ListAccounts() {
-			acc := creds.GetAccount(accName)
+func getKimiProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+	return getAccountProviders(providerKimi, accountFlag, allAccounts,
+		credsMgr.LoadKimi,
+		func(c *credentials.KimiCredentials) []string { return c.ListAccounts() },
+		func(c *credentials.KimiCredentials, name string) provider.Provider {
+			acc := c.GetAccount(name)
 			if acc == nil {
-				continue
+				return nil
 			}
-			providers = append(providers, ProviderInstance{
-				Provider:    kimi.NewProvider(acc.APIKey),
-				AccountName: accName,
-			})
-		}
-	} else {
-		// Use specified account
-		acc := creds.GetAccount(accountFlag)
-		if acc == nil {
-			return providers
-		}
-		providers = append(providers, ProviderInstance{
-			Provider:    kimi.NewProvider(acc.APIKey),
-			AccountName: accountFlag,
+			return kimi.NewProvider(acc.APIKey)
 		})
-	}
-
-	return providers
 }
 
 // getZaiProviders returns Z.AI provider instances
-func getZaiProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) []ProviderInstance {
-	var providers []ProviderInstance
-
-	creds, err := credsMgr.LoadZAi()
-	if err != nil {
-		return providers
-	}
-
-	if allAccounts || accountFlag == "" {
-		// Add all accounts when --all-accounts is set or no specific account requested
-		for _, accName := range creds.ListAccounts() {
-			acc := creds.GetAccount(accName)
+func getZaiProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+	return getAccountProviders(providerZAi, accountFlag, allAccounts,
+		credsMgr.LoadZAi,
+		func(c *credentials.ZAiCredentials) []string { return c.ListAccounts() },
+		func(c *credentials.ZAiCredentials, name string) provider.Provider {
+			acc := c.GetAccount(name)
 			if acc == nil {
-				continue
+				return nil
 			}
-			providers = append(providers, ProviderInstance{
-				Provider:    zai.NewProvider(acc.APIKey),
-				AccountName: accName,
-			})
-		}
-	} else {
-		// Use specified account
-		acc := creds.GetAccount(accountFlag)
-		if acc == nil {
-			return providers
-		}
-		providers = append(providers, ProviderInstance{
-			Provider:    zai.NewProvider(acc.APIKey),
-			AccountName: accountFlag,
+			return zai.NewProvider(acc.APIKey)
 		})
-	}
-
-	return providers
 }
 
 // getMiniMaxProviders returns MiniMax provider instances
-func getMiniMaxProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) []ProviderInstance {
-	var providers []ProviderInstance
-
-	creds, err := credsMgr.LoadMiniMax()
-	if err != nil {
-		return providers
-	}
-
-	if allAccounts || accountFlag == "" {
-		// Add all accounts when --all-accounts is set or no specific account requested
-		for _, accName := range creds.ListAccounts() {
-			acc := creds.GetAccount(accName)
+func getMiniMaxProviders(accountFlag string, allAccounts bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+	return getAccountProviders(providerMiniMax, accountFlag, allAccounts,
+		credsMgr.LoadMiniMax,
+		func(c *credentials.MiniMaxCredentials) []string { return c.ListAccounts() },
+		func(c *credentials.MiniMaxCredentials, name string) provider.Provider {
+			acc := c.GetAccount(name)
 			if acc == nil {
-				continue
+				return nil
 			}
-			providers = append(providers, ProviderInstance{
-				Provider:    minimax.NewProvider(acc.Cookie, acc.GroupID),
-				AccountName: accName,
-			})
-		}
-	} else {
-		// Use specified account
-		acc := creds.GetAccount(accountFlag)
-		if acc == nil {
-			return providers
-		}
-		providers = append(providers, ProviderInstance{
-			Provider:    minimax.NewProvider(acc.Cookie, acc.GroupID),
-			AccountName: accountFlag,
+			return minimax.NewProvider(acc.Cookie, acc.GroupID)
 		})
-	}
-
-	return providers
 }
 
 // FetchAllUsage fetches usage from all providers concurrently
@@ -256,7 +339,7 @@ func FetchAllUsage(providers []ProviderInstance) *provider.UsageStats {
 			usage, err := prov.GetUsage()
 			if err != nil {
 				mu.Lock()
-				stats.Providers[idx] = *provider.NewUsageError(prov.ID(), prov.Name(), err)
+				stats.Providers[idx] = failure(prov.ID(), prov.AccountName, err)
 				mu.Unlock()
 				return
 			}

@@ -60,10 +60,10 @@ var ErrNotFound = errors.New("credentials not found in keychain")
 // a JSON with the claudeAiOauth field.
 // Returns the raw JSON bytes or an error.
 func Load() ([]byte, error) {
-	cJson := C.GetCredentials()
-	defer C.free(unsafe.Pointer(cJson))
+	cJSON := C.GetCredentials()
+	defer C.free(unsafe.Pointer(cJSON))
 
-	jsonStr := C.GoString(cJson)
+	jsonStr := C.GoString(cJSON)
 
 	// Empty string means item not found
 	if jsonStr == "" {

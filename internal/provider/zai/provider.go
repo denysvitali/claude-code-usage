@@ -4,6 +4,7 @@ package zai
 import (
 	"fmt"
 
+	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/provider"
 )
 
@@ -25,7 +26,12 @@ func NewProvider(apiKey string) *Provider {
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return "Z.AI"
+	return credentials.ProviderDisplayName(credentials.ProviderZAi)
+}
+
+// ShortName returns the provider's compact label
+func (p *Provider) ShortName() string {
+	return "Z"
 }
 
 // ID returns the provider's unique identifier

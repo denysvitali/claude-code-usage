@@ -11,6 +11,9 @@ type Provider interface {
 	// Name returns the provider's display name
 	Name() string
 
+	// ShortName returns a compact label for space-constrained output (e.g. waybar)
+	ShortName() string
+
 	// ID returns the provider's unique identifier
 	ID() string
 

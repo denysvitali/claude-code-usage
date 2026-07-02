@@ -46,6 +46,12 @@ func NewManagerFromFile(path string) *Manager {
 	}
 }
 
+// UsesCombinedFile reports whether credentials come from a combined file
+// (via --credentials-file) rather than the per-provider config directory.
+func (m *Manager) UsesCombinedFile() bool {
+	return m.credentialsFile != ""
+}
+
 // ConfigDir returns the configuration directory path
 func (m *Manager) ConfigDir() string {
 	return m.configDir
@@ -539,54 +545,28 @@ func (m *Manager) DeleteProvider(providerID string) error {
 
 // ListAccounts returns all account names for a provider
 func (m *Manager) ListAccounts(providerID string) ([]string, error) {
-	switch providerID {
-	case "claude":
-		creds, err := m.LoadClaude()
-		if err != nil {
-			return nil, err
-		}
-		return creds.ListAccounts(), nil
-	case "kimi":
-		creds, err := m.LoadKimi()
-		if err != nil {
-			return nil, err
-		}
-		return creds.ListAccounts(), nil
-	case "zai":
-		creds, err := m.LoadZAi()
-		if err != nil {
-			return nil, err
-		}
-		return creds.ListAccounts(), nil
-	case "minimax":
-		creds, err := m.LoadMiniMax()
-		if err != nil {
-			return nil, err
-		}
-		return creds.ListAccounts(), nil
-	default:
-		return nil, fmt.Errorf("unknown provider: %s", providerID)
+	creds, err := m.LoadAccountCredentials(providerID)
+	if err != nil {
+		return nil, err
 	}
+	return creds.ListAccounts(), nil
 }
 
-// MigrateFromClaudeCLI copies credentials from the Claude CLI to the new format
+// MigrateFromClaudeCLI copies credentials from the Claude CLI to the new format.
+// It reads from the CLI's storage (macOS Keychain first, then
+// ~/.claude/.credentials.json) via Load.
 func (m *Manager) MigrateFromClaudeCLI() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	oldPath := filepath.Join(homeDir, ".claude", ".credentials.json")
-	newPath := m.providerPath("claude")
-
-	// Check if old file exists
-	if _, err := os.Stat(oldPath); os.IsNotExist(err) {
-		return fmt.Errorf("old Claude credentials not found at %s", oldPath)
-	}
+	newPath := m.providerPath(ProviderClaude)
 
 	// Check if new file already exists
 	if _, err := os.Stat(newPath); err == nil {
-		return fmt.Errorf("new credentials already exist at %s", newPath)
+		return fmt.Errorf("credentials already exist at %s - remove that file first to re-migrate", newPath)
+	}
+
+	// Load from the Claude CLI's storage (keychain on macOS, file elsewhere)
+	creds, err := Load()
+	if err != nil {
+		return fmt.Errorf("failed to load Claude CLI credentials: %w", err)
 	}
 
 	// Ensure config directory exists
@@ -594,13 +574,11 @@ func (m *Manager) MigrateFromClaudeCLI() error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Read old file
-	data, err := os.ReadFile(oldPath) //nolint:gosec
+	data, err := json.MarshalIndent(creds, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to read old credentials: %w", err)
+		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	// Write new file
 	if err := os.WriteFile(newPath, data, 0600); err != nil {
 		return fmt.Errorf("failed to write new credentials: %w", err)
 	}

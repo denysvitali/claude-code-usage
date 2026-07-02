@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/provider"
 )
 
@@ -24,7 +25,12 @@ func NewProvider(accessToken string, debug bool) *Provider {
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return "Claude"
+	return credentials.ProviderDisplayName(credentials.ProviderClaude)
+}
+
+// ShortName returns the provider's compact label
+func (p *Provider) ShortName() string {
+	return "C"
 }
 
 // ID returns the provider's unique identifier

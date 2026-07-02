@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/denysvitali/llm-usage/internal/credentials"
@@ -18,12 +19,6 @@ import (
 
 //go:embed web
 var embeddedFS embed.FS
-
-const (
-	providerClaude = "claude"
-	providerKimi   = "kimi"
-	providerZAi    = "zai"
-)
 
 // Config holds the server configuration
 type Config struct {
@@ -93,7 +88,7 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Printf("Starting server on http://%s:%d", s.config.Host, s.config.Port)
 
 	// Shutdown on context cancellation
-	go func() {
+	go func() { //nolint:gosec // shutdown must outlive the cancelled context
 		<-ctx.Done()
 		log.Println("Shutting down server...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -106,7 +101,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // loadProviders loads all configured providers
 func (s *Server) loadProviders() {
-	s.providers = usage.GetProviders("", "", true, false, s.credsMgr)
+	s.providers, _ = usage.GetProviders("", "", true, false, s.credsMgr)
 }
 
 // handleIndex serves the frontend HTML
@@ -140,9 +135,10 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	accountFilter := r.URL.Query().Get("account")
 
 	// Always fetch fresh providers on each request
-	providers := usage.GetProviders(providerFilter, accountFilter, accountFilter == "", false, s.credsMgr)
+	providers, failures := usage.GetProviders(providerFilter, accountFilter, accountFilter == "", false, s.credsMgr)
 
 	stats := usage.FetchAllUsage(providers)
+	stats.Providers = append(stats.Providers, failures...)
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -165,39 +161,22 @@ func (s *Server) handleProviders(w http.ResponseWriter, _ *http.Request) {
 	providerList := make([]ProviderInfo, 0, len(providerIDs))
 
 	for _, pid := range providerIDs {
-		var accounts []string
-		switch pid {
-		case providerClaude:
-			if creds, err := s.credsMgr.LoadClaude(); err == nil {
-				accounts = creds.ListAccounts()
-			}
-			// Check for keychain credentials (only add "default" if not already present)
-			if _, _, err := usage.LoadClaudeFromKeychain(); err == nil {
-				found := false
-				for _, acc := range accounts {
-					if acc == "default" {
-						found = true
-						break
-					}
-				}
-				if !found {
-					accounts = append(accounts, "default")
-				}
-			}
-		case providerKimi:
-			if creds, err := s.credsMgr.LoadKimi(); err == nil {
-				accounts = creds.ListAccounts()
-			}
-		case providerZAi:
-			if creds, err := s.credsMgr.LoadZAi(); err == nil {
-				accounts = creds.ListAccounts()
+		accounts, err := s.credsMgr.ListAccounts(pid)
+		if err != nil {
+			accounts = nil
+		}
+
+		// Check for keychain credentials (only add "default" if not already present)
+		if pid == credentials.ProviderClaude {
+			if _, _, err := usage.LoadClaudeFromKeychain(); err == nil &&
+				!slices.Contains(accounts, credentials.DefaultAccountName) {
+				accounts = append(accounts, credentials.DefaultAccountName)
 			}
 		}
 
-		name := providerName(pid)
 		providerList = append(providerList, ProviderInfo{
 			ID:       pid,
-			Name:     name,
+			Name:     credentials.ProviderDisplayName(pid),
 			Accounts: accounts,
 		})
 	}
@@ -205,19 +184,6 @@ func (s *Server) handleProviders(w http.ResponseWriter, _ *http.Request) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(providerList)
-}
-
-func providerName(id string) string {
-	switch id {
-	case providerClaude:
-		return "Claude"
-	case providerKimi:
-		return "Kimi"
-	case providerZAi:
-		return "Z.AI"
-	default:
-		return id
-	}
 }
 
 // AutoDetectWebDir attempts to find the web directory automatically
