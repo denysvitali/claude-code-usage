@@ -81,7 +81,8 @@ internal/
 │   ├── minimax/ # MiniMax provider implementation (cookie + group ID)
 │   └── zai/     # Z.AI stub (not implemented)
 ├── serve/       # Web server + embedded UI
-│   └── serve.go # HTTP server with JSON API
+│   ├── server.go # HTTP server with JSON API
+│   └── web/      # Static assets embedded via go:embed
 ├── setup/       # Setup commands
 │   ├── setup.go     # CLI setup commands (add, list, remove, rename, migrate)
 │   └── tui/         # Interactive TUI setup wizard (Bubble Tea)
@@ -128,7 +129,9 @@ The app also supports migration from Claude CLI credentials at `~/.claude/.crede
 
 ### Multi-Account Support
 
-Each provider supports multiple named accounts. The `--account` flag filters to a specific account, while omitting it shows all configured accounts aggregated.
+Each provider supports multiple named accounts. The `--account` flag filters to a specific account, `--all-accounts` aggregates usage across all accounts of a provider, and omitting both shows all configured providers/accounts.
+
+The `--credentials-file` flag on `cmd/root.go` accepts a path to a combined credentials file where values may reference environment variables via `$VAR` or `${VAR}` syntax, expanded at load time.
 
 ## Key Dependencies
 
@@ -145,23 +148,6 @@ Each provider supports multiple named accounts. The `--account` flag filters to 
 | Kimi     | Fully implemented | API Key |
 | MiniMax  | Fully implemented | Cookie + Group ID |
 | Z.AI     | Not implemented (stub) | API Key |
-
-## Testing
-
-Run tests with race detection:
-```bash
-make test
-```
-
-Run a single test:
-```bash
-go test -v -run TestName ./internal/cache/
-```
-
-Coverage report:
-```bash
-make coverage
-```
 
 ## Release Process
 

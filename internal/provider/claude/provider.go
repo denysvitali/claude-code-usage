@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/denysvitali/llm-usage/internal/provider"
@@ -9,12 +10,15 @@ import (
 // Provider implements the provider.Provider interface for Claude
 type Provider struct {
 	client *Client
+	debug  bool
 }
 
-// NewProvider creates a new Claude provider with the given access token
-func NewProvider(accessToken string) *Provider {
+// NewProvider creates a new Claude provider with the given access token.
+// If debug is true, the raw API response is included in Usage.Extra["raw"].
+func NewProvider(accessToken string, debug bool) *Provider {
 	return &Provider{
 		client: NewClient(accessToken),
+		debug:  debug,
 	}
 }
 
@@ -30,7 +34,7 @@ func (p *Provider) ID() string {
 
 // GetUsage fetches current usage statistics from Claude
 func (p *Provider) GetUsage() (*provider.Usage, error) {
-	usage, err := p.client.GetUsage()
+	usage, raw, err := p.client.GetUsage()
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +89,17 @@ func (p *Provider) GetUsage() (*provider.Usage, error) {
 		})
 	}
 
+	for _, limit := range usage.Limits {
+		if limit.Scope == nil || limit.Scope.Model == nil || limit.Scope.Model.DisplayName == "" {
+			continue
+		}
+		windows = append(windows, provider.UsageWindow{
+			Label:       limitGroupLabel(limit.Group) + " " + limit.Scope.Model.DisplayName,
+			Utilization: limit.Percent,
+			ResetsAt:    limit.ResetsAt,
+		})
+	}
+
 	extra := make(map[string]interface{})
 	if usage.ExtraUsage != nil && usage.ExtraUsage.IsEnabled {
 		extra["extra_usage"] = map[string]interface{}{
@@ -95,11 +110,28 @@ func (p *Provider) GetUsage() (*provider.Usage, error) {
 		}
 	}
 
+	if p.debug {
+		extra["raw"] = json.RawMessage(raw)
+	}
+
 	return &provider.Usage{
 		Provider: "claude",
 		Windows:  windows,
 		Extra:    extra,
 	}, nil
+}
+
+// limitGroupLabel maps a UsageLimit's group to the same label prefix used
+// for the equivalent top-level window (e.g. "session" -> "5-Hour").
+func limitGroupLabel(group string) string {
+	switch group {
+	case "session":
+		return "5-Hour"
+	case "weekly":
+		return "7-Day"
+	default:
+		return group
+	}
 }
 
 // IsExpired checks if the token has expired

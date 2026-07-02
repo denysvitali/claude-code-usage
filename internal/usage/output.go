@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -151,8 +152,26 @@ func OutputPretty(stats *provider.UsageStats) {
 			printKimiSubscription(sub)
 		}
 
+		// Print raw API response if --debug was passed
+		if raw, ok := p.Extra["raw"]; ok {
+			printRawUsage(raw)
+		}
+
 		fmt.Println()
 	}
+}
+
+func printRawUsage(raw any) {
+	rawMsg, ok := raw.(json.RawMessage)
+	if !ok {
+		return
+	}
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, rawMsg, "", "  "); err != nil {
+		return
+	}
+	fmt.Println("Raw API Response:")
+	fmt.Println(buf.String())
 }
 
 func printExtraUsageFromMap(extra any) {

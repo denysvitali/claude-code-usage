@@ -17,29 +17,36 @@ permissions:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-latest
+    # macos-latest builds the darwin targets natively with cgo (required for
+    # Keychain access) while still cross-compiling the cgo-free linux/windows
+    # targets fine.
+    runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Create and push tag (manual trigger)
         if: github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ inputs.tag }}" -m "Release ${{ inputs.tag }}"
-          git push origin "${{ inputs.tag }}"
+          git tag -a "${INPUTS_TAG}" -m "Release ${INPUTS_TAG}"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" push origin "${INPUTS_TAG}"
+        env:
+          INPUTS_TAG: ${{ inputs.tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
 
       - name: Generate changelog
-        uses: orhun/git-cliff-action@v4
+        uses: orhun/git-cliff-action@f50e11560dce63f7c33227798f90b924471a88b5 # v4
         id: git-cliff
         with:
           config: cliff.toml
@@ -48,7 +55,7 @@ jobs:
           OUTPUT: CHANGELOG.md
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
           distribution: goreleaser
           version: "~> v2"
