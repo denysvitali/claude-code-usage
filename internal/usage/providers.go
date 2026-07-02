@@ -38,7 +38,7 @@ func LoadClaudeFromKeychain() (*credentials.OAuthCredentials, string, error) {
 }
 
 // GetProviders returns the list of providers to query based on the flags
-func GetProviders(providerFlag, accountFlag string, allAccounts bool, credsMgr *credentials.Manager) []ProviderInstance {
+func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, credsMgr *credentials.Manager) []ProviderInstance {
 	var providerIDs []string
 
 	if providerFlag == "all" || providerFlag == "" {
@@ -57,7 +57,7 @@ func GetProviders(providerFlag, accountFlag string, allAccounts bool, credsMgr *
 		pid = strings.TrimSpace(pid)
 		switch pid {
 		case providerClaude:
-			providers = append(providers, getClaudeProviders(accountFlag, credsMgr)...)
+			providers = append(providers, getClaudeProviders(accountFlag, debug, credsMgr)...)
 		case providerKimi:
 			providers = append(providers, getKimiProviders(accountFlag, allAccounts, credsMgr)...)
 		case providerZAi:
@@ -71,7 +71,7 @@ func GetProviders(providerFlag, accountFlag string, allAccounts bool, credsMgr *
 }
 
 // getClaudeProviders returns Claude provider instances
-func getClaudeProviders(accountFlag string, credsMgr *credentials.Manager) []ProviderInstance {
+func getClaudeProviders(accountFlag string, debug bool, credsMgr *credentials.Manager) []ProviderInstance {
 	var providers []ProviderInstance
 
 	// Try loading from keychain first (Claude CLI location)
@@ -96,7 +96,7 @@ func getClaudeProviders(accountFlag string, credsMgr *credentials.Manager) []Pro
 			return providers
 		}
 		providers = append(providers, ProviderInstance{
-			Provider:    claude.NewProvider(oauth.AccessToken),
+			Provider:    claude.NewProvider(oauth.AccessToken, debug),
 			AccountName: accountFlag,
 		})
 		return providers
@@ -106,7 +106,7 @@ func getClaudeProviders(accountFlag string, credsMgr *credentials.Manager) []Pro
 	// Add from keychain if available
 	if keychainErr == nil && !claude.IsExpired(keychainCreds.ExpiresAt) {
 		providers = append(providers, ProviderInstance{
-			Provider:    claude.NewProvider(keychainCreds.AccessToken),
+			Provider:    claude.NewProvider(keychainCreds.AccessToken, debug),
 			AccountName: keychainAccount,
 		})
 	}
@@ -122,7 +122,7 @@ func getClaudeProviders(accountFlag string, credsMgr *credentials.Manager) []Pro
 				continue
 			}
 			providers = append(providers, ProviderInstance{
-				Provider:    claude.NewProvider(oauth.AccessToken),
+				Provider:    claude.NewProvider(oauth.AccessToken, debug),
 				AccountName: accName,
 			})
 		}

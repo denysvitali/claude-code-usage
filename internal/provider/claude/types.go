@@ -11,6 +11,29 @@ type UsageResponse struct {
 	SevenDaySonnet   *UsageWindow `json:"seven_day_sonnet"`
 	IguanaNecktie    *UsageWindow `json:"iguana_necktie"`
 	ExtraUsage       *ExtraUsage  `json:"extra_usage"`
+	Limits           []UsageLimit `json:"limits"`
+}
+
+// UsageLimit represents a single entry from the "limits" array, which can be
+// scoped to a specific model (e.g. a per-model weekly limit).
+type UsageLimit struct {
+	Group    string           `json:"group"`
+	Kind     string           `json:"kind"`
+	IsActive bool             `json:"is_active"`
+	Percent  float64          `json:"percent"`
+	ResetsAt *time.Time       `json:"resets_at"`
+	Severity string           `json:"severity"`
+	Scope    *UsageLimitScope `json:"scope"`
+}
+
+// UsageLimitScope describes what a UsageLimit applies to.
+type UsageLimitScope struct {
+	Model *UsageLimitModel `json:"model"`
+}
+
+// UsageLimitModel identifies the model a scoped UsageLimit applies to.
+type UsageLimitModel struct {
+	DisplayName string `json:"display_name"`
 }
 
 // ExtraUsage represents additional usage credits beyond the subscription

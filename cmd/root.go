@@ -18,6 +18,7 @@ var (
 	jsonOutput      bool
 	waybarOutput    bool
 	credentialsFile string
+	debugFlag       bool
 )
 
 var rootCmd = &cobra.Command{
@@ -42,6 +43,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&waybarOutput, "waybar", false, "Output in waybar JSON format")
 	rootCmd.Flags().StringVar(&credentialsFile, "credentials-file", "", "Path to a combined credentials file (values may use $VAR or ${VAR} env references)")
+	rootCmd.Flags().BoolVar(&debugFlag, "debug", false, "Include raw provider API responses in the output")
 }
 
 func runUsage(_ *cobra.Command, _ []string) error {
@@ -53,7 +55,7 @@ func runUsage(_ *cobra.Command, _ []string) error {
 	}
 
 	// Determine which providers to query
-	providers := usage.GetProviders(providerFlag, accountFlag, allAccountsFlag, credsMgr)
+	providers := usage.GetProviders(providerFlag, accountFlag, allAccountsFlag, debugFlag, credsMgr)
 	if len(providers) == 0 {
 		if waybarOutput {
 			usage.OutputWaybarError("No providers configured")

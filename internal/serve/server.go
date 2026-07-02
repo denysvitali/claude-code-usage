@@ -106,7 +106,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // loadProviders loads all configured providers
 func (s *Server) loadProviders() {
-	s.providers = usage.GetProviders("", "", true, s.credsMgr)
+	s.providers = usage.GetProviders("", "", true, false, s.credsMgr)
 }
 
 // handleIndex serves the frontend HTML
@@ -140,7 +140,7 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	accountFilter := r.URL.Query().Get("account")
 
 	// Always fetch fresh providers on each request
-	providers := usage.GetProviders(providerFilter, accountFilter, accountFilter == "", s.credsMgr)
+	providers := usage.GetProviders(providerFilter, accountFilter, accountFilter == "", false, s.credsMgr)
 
 	stats := usage.FetchAllUsage(providers)
 
