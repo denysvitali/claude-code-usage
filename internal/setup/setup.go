@@ -8,13 +8,20 @@ import (
 	"strings"
 
 	"github.com/denysvitali/llm-usage/internal/credentials"
+	"github.com/denysvitali/llm-usage/internal/provider"
+	"github.com/denysvitali/llm-usage/internal/provider/claude"
+	"github.com/denysvitali/llm-usage/internal/provider/kimi"
+	"github.com/denysvitali/llm-usage/internal/provider/minimax"
+	"golang.org/x/term"
 )
 
 const (
-	providerClaude  = "claude"
-	providerKimi    = "kimi"
-	providerZAi     = "zai"
-	providerMiniMax = "minimax"
+	providerClaude  = credentials.ProviderClaude
+	providerKimi    = credentials.ProviderKimi
+	providerZAi     = credentials.ProviderZAi
+	providerMiniMax = credentials.ProviderMiniMax
+
+	defaultAccountName = credentials.DefaultAccountName
 )
 
 // Wizard runs an interactive setup wizard for first-time users
@@ -27,10 +34,10 @@ func Wizard(mgr *credentials.Manager) error {
 		id   string
 		name string
 	}{
-		{providerClaude, "Claude (Anthropic)"},
-		{providerKimi, "Kimi"},
-		{providerZAi, "Z.AI"},
-		{providerMiniMax, "MiniMax"},
+		{providerClaude, providerName(providerClaude)},
+		{providerKimi, providerName(providerKimi)},
+		{providerZAi, providerName(providerZAi) + " (usage fetching not yet implemented)"},
+		{providerMiniMax, providerName(providerMiniMax)},
 	}
 
 	for _, p := range providers {
@@ -53,9 +60,9 @@ func AddAccount(mgr *credentials.Manager, providerID, accountName string) error 
 	case providerClaude:
 		return addClaudeAccount(mgr, accountName)
 	case providerKimi:
-		return addAPIKeyAccount(mgr, providerKimi, "Kimi", accountName)
+		return addAPIKeyAccount(mgr, providerKimi, accountName)
 	case providerZAi:
-		return addAPIKeyAccount(mgr, providerZAi, "Z.AI", accountName)
+		return addAPIKeyAccount(mgr, providerZAi, accountName)
 	case providerMiniMax:
 		return addMiniMaxAccount(mgr, accountName)
 	default:
@@ -63,59 +70,90 @@ func AddAccount(mgr *credentials.Manager, providerID, accountName string) error 
 	}
 }
 
-// addClaudeAccount adds a Claude account
-func addClaudeAccount(mgr *credentials.Manager, _ string) error {
+// addClaudeAccount adds a Claude account, either by migrating from the Claude
+// CLI or by manually entering OAuth tokens.
+func addClaudeAccount(mgr *credentials.Manager, accountName string) error {
 	fmt.Println("\nClaude (Anthropic) Setup")
 	fmt.Println("========================")
 	fmt.Println()
-	fmt.Println("Claude uses OAuth authentication which requires a browser flow.")
-	fmt.Println("Please follow these steps:")
+	fmt.Println("Claude uses OAuth authentication. You can either:")
 	fmt.Println()
-	fmt.Println("1. Ensure you have the Claude CLI installed and authenticated:")
-	fmt.Println("   npm install -g @anthropic-ai/claude-cli")
-	fmt.Println("   claude login")
+	fmt.Println("1. Migrate credentials from the Claude CLI (recommended).")
+	fmt.Println("   Install and authenticate first if needed:")
+	fmt.Println("   npm install -g @anthropic-ai/claude-code")
+	fmt.Println("   claude   (then authenticate when prompted)")
 	fmt.Println()
-	fmt.Println("2. Run the migration command to copy your credentials:")
-	fmt.Println("   llm-usage setup migrate-claude")
-	fmt.Println()
-	fmt.Println("Or manually copy ~/.claude/.credentials.json to $XDG_CONFIG_HOME/llm-usage/claude.json")
+	fmt.Println("2. Manually enter an OAuth access token (and optional refresh token).")
 	fmt.Println()
 
-	// Check if they want to migrate now
-	fmt.Print("Would you like to migrate Claude CLI credentials now? [y/N]: ")
+	fmt.Print("Migrate Claude CLI credentials now? [y/N]: ")
 	if confirm() {
 		if err := mgr.MigrateFromClaudeCLI(); err != nil {
 			return fmt.Errorf("migration failed: %w", err)
 		}
 		fmt.Println("Successfully migrated Claude credentials!")
+		return nil
 	}
 
+	// Manual token entry
+	fmt.Print("Enter tokens manually instead? [y/N]: ")
+	if !confirm() {
+		return nil
+	}
+
+	if accountName == "" {
+		fmt.Printf("Enter account name (%s): ", defaultAccountName)
+		accountName = readLine()
+		if accountName == "" {
+			accountName = defaultAccountName
+		}
+	}
+
+	accessToken := readSecret("Enter your Claude OAuth access token: ")
+	if accessToken == "" {
+		return fmt.Errorf("access token is required")
+	}
+	refreshToken := readSecret("Enter your refresh token (optional, enables auto-refresh): ")
+
+	if err := SaveClaudeAccount(mgr, accountName, accessToken, refreshToken); err != nil {
+		return fmt.Errorf("failed to save credentials: %w", err)
+	}
+	fmt.Printf("Successfully added Claude account '%s'!\n", accountName)
+	verifyAccount(claude.NewProvider(accessToken, false))
 	return nil
 }
 
 // addAPIKeyAccount adds an account for API key-based providers (Kimi, Z.AI)
-func addAPIKeyAccount(mgr *credentials.Manager, providerID, displayName, accountName string) error {
+func addAPIKeyAccount(mgr *credentials.Manager, providerID, accountName string) error {
+	displayName := providerName(providerID)
 	fmt.Printf("\n%s Setup\n", displayName)
 	fmt.Println(strings.Repeat("=", len(displayName)+6))
 	fmt.Println()
 
 	// Get account name if not provided
 	if accountName == "" {
-		fmt.Print("Enter account name (default): ")
+		fmt.Printf("Enter account name (%s): ", defaultAccountName)
 		accountName = readLine()
 		if accountName == "" {
-			accountName = "default"
+			accountName = defaultAccountName
 		}
 	}
 
 	// Get API key
-	fmt.Printf("Enter your %s API key: ", displayName)
-	apiKey := readLine()
+	apiKey := readSecret(fmt.Sprintf("Enter your %s API key: ", displayName))
 	if apiKey == "" {
 		return fmt.Errorf("API key is required")
 	}
 
-	return saveAPIKeyCredentials(mgr, providerID, accountName, apiKey)
+	if err := SaveAPIKeyAccount(mgr, providerID, accountName, apiKey); err != nil {
+		return fmt.Errorf("failed to save credentials: %w", err)
+	}
+	fmt.Printf("Successfully added %s account '%s'!\n", displayName, accountName)
+
+	if providerID == providerKimi {
+		verifyAccount(kimi.NewProvider(apiKey))
+	}
+	return nil
 }
 
 // addMiniMaxAccount adds a MiniMax account
@@ -128,10 +166,10 @@ func addMiniMaxAccount(mgr *credentials.Manager, accountName string) error {
 
 	// Get account name if not provided
 	if accountName == "" {
-		fmt.Print("Enter account name (default): ")
+		fmt.Printf("Enter account name (%s): ", defaultAccountName)
 		accountName = readLine()
 		if accountName == "" {
-			accountName = "default"
+			accountName = defaultAccountName
 		}
 	}
 
@@ -143,83 +181,106 @@ func addMiniMaxAccount(mgr *credentials.Manager, accountName string) error {
 	}
 
 	// Get Cookie
-	fmt.Print("Enter your MiniMax cookie: ")
-	cookie := readLine()
+	cookie := readSecret("Enter your MiniMax cookie: ")
 	if cookie == "" {
 		return fmt.Errorf("cookie is required")
 	}
 
-	return saveMiniMaxCredentials(mgr, accountName, cookie, groupID)
+	if err := SaveMiniMaxAccount(mgr, accountName, cookie, groupID); err != nil {
+		return fmt.Errorf("failed to save credentials: %w", err)
+	}
+	fmt.Printf("Successfully added MiniMax account '%s'!\n", accountName)
+	verifyAccount(minimax.NewProvider(cookie, groupID))
+	return nil
 }
 
-// saveAPIKeyCredentials saves credentials for API key-based providers
-func saveAPIKeyCredentials(mgr *credentials.Manager, providerID, accountName, apiKey string) error {
+// verifyAccount makes a test API call with the freshly saved credentials and
+// reports the result, so typos are caught at setup time instead of first use.
+func verifyAccount(p provider.Provider) {
+	fmt.Print("Verifying credentials... ")
+	if _, err := p.GetUsage(); err != nil {
+		fmt.Println("failed!")
+		fmt.Fprintf(os.Stderr, "Warning: test API call failed: %v\n", err)
+		fmt.Fprintln(os.Stderr, "The credentials were saved anyway - double-check them if usage fetching fails.")
+		return
+	}
+	fmt.Println("OK")
+}
+
+// SaveClaudeAccount saves a Claude account with manually provided OAuth tokens.
+func SaveClaudeAccount(mgr *credentials.Manager, accountName, accessToken, refreshToken string) error {
+	var creds credentials.ClaudeCredentials
+	if mgr.ProviderExists(providerClaude) {
+		if err := mgr.LoadProvider(providerClaude, &creds); err != nil {
+			creds = credentials.ClaudeCredentials{}
+		}
+	}
+
+	if creds.Accounts == nil {
+		creds.Accounts = make(map[string]*credentials.ClaudeAccount)
+		if creds.ClaudeAiOauth != nil {
+			creds.Accounts[defaultAccountName] = &credentials.ClaudeAccount{
+				AccessToken:  creds.ClaudeAiOauth.AccessToken,
+				RefreshToken: creds.ClaudeAiOauth.RefreshToken,
+				ExpiresAt:    creds.ClaudeAiOauth.ExpiresAt,
+				Scopes:       creds.ClaudeAiOauth.Scopes,
+			}
+			creds.ClaudeAiOauth = nil
+		}
+	}
+
+	creds.Accounts[accountName] = &credentials.ClaudeAccount{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	return mgr.SaveProvider(providerClaude, creds)
+}
+
+// SaveAPIKeyAccount saves an account for API key-based providers (Kimi, Z.AI),
+// migrating any legacy single-key credentials into the accounts map.
+func SaveAPIKeyAccount(mgr *credentials.Manager, providerID, accountName, apiKey string) error {
 	switch providerID {
 	case providerKimi:
-		return saveKimiCredentials(mgr, accountName, apiKey)
+		var creds credentials.KimiCredentials
+		if mgr.ProviderExists(providerKimi) {
+			if err := mgr.LoadProvider(providerKimi, &creds); err != nil {
+				creds = credentials.KimiCredentials{}
+			}
+		}
+		if creds.Accounts == nil {
+			creds.Accounts = make(map[string]*credentials.KimiAccount)
+			if creds.APIKey != "" {
+				creds.Accounts[defaultAccountName] = &credentials.KimiAccount{APIKey: creds.APIKey}
+				creds.APIKey = ""
+			}
+		}
+		creds.Accounts[accountName] = &credentials.KimiAccount{APIKey: apiKey}
+		return mgr.SaveProvider(providerKimi, creds)
 	case providerZAi:
-		return saveZAiCredentials(mgr, accountName, apiKey)
+		var creds credentials.ZAiCredentials
+		if mgr.ProviderExists(providerZAi) {
+			if err := mgr.LoadProvider(providerZAi, &creds); err != nil {
+				creds = credentials.ZAiCredentials{}
+			}
+		}
+		if creds.Accounts == nil {
+			creds.Accounts = make(map[string]*credentials.ZAiAccount)
+			if creds.APIKey != "" {
+				creds.Accounts[defaultAccountName] = &credentials.ZAiAccount{APIKey: creds.APIKey}
+				creds.APIKey = ""
+			}
+		}
+		creds.Accounts[accountName] = &credentials.ZAiAccount{APIKey: apiKey}
+		return mgr.SaveProvider(providerZAi, creds)
 	default:
 		return fmt.Errorf("unsupported provider: %s", providerID)
 	}
 }
 
-// saveKimiCredentials saves Kimi credentials
-func saveKimiCredentials(mgr *credentials.Manager, accountName, apiKey string) error {
-	var creds credentials.KimiCredentials
-	if mgr.ProviderExists(providerKimi) {
-		if err := mgr.LoadProvider(providerKimi, &creds); err != nil {
-			creds = credentials.KimiCredentials{}
-		}
-	}
-
-	if creds.Accounts == nil {
-		creds.Accounts = make(map[string]*credentials.KimiAccount)
-		if creds.APIKey != "" {
-			creds.Accounts["default"] = &credentials.KimiAccount{APIKey: creds.APIKey}
-			creds.APIKey = ""
-		}
-	}
-
-	creds.Accounts[accountName] = &credentials.KimiAccount{APIKey: apiKey}
-
-	if err := mgr.SaveProvider(providerKimi, creds); err != nil {
-		return fmt.Errorf("failed to save credentials: %w", err)
-	}
-
-	fmt.Printf("Successfully added Kimi account '%s'!\n", accountName)
-	return nil
-}
-
-// saveZAiCredentials saves Z.AI credentials
-func saveZAiCredentials(mgr *credentials.Manager, accountName, apiKey string) error {
-	var creds credentials.ZAiCredentials
-	if mgr.ProviderExists(providerZAi) {
-		if err := mgr.LoadProvider(providerZAi, &creds); err != nil {
-			creds = credentials.ZAiCredentials{}
-		}
-	}
-
-	if creds.Accounts == nil {
-		creds.Accounts = make(map[string]*credentials.ZAiAccount)
-		if creds.APIKey != "" {
-			creds.Accounts["default"] = &credentials.ZAiAccount{APIKey: creds.APIKey}
-			creds.APIKey = ""
-		}
-	}
-
-	creds.Accounts[accountName] = &credentials.ZAiAccount{APIKey: apiKey}
-
-	if err := mgr.SaveProvider(providerZAi, creds); err != nil {
-		return fmt.Errorf("failed to save credentials: %w", err)
-	}
-
-	fmt.Printf("Successfully added Z.AI account '%s'!\n", accountName)
-	return nil
-}
-
-// saveMiniMaxCredentials saves MiniMax credentials
-func saveMiniMaxCredentials(mgr *credentials.Manager, accountName, cookie, groupID string) error {
+// SaveMiniMaxAccount saves a MiniMax account, migrating any legacy
+// single-account credentials into the accounts map.
+func SaveMiniMaxAccount(mgr *credentials.Manager, accountName, cookie, groupID string) error {
 	var creds credentials.MiniMaxCredentials
 	if mgr.ProviderExists(providerMiniMax) {
 		if err := mgr.LoadProvider(providerMiniMax, &creds); err != nil {
@@ -230,7 +291,7 @@ func saveMiniMaxCredentials(mgr *credentials.Manager, accountName, cookie, group
 	if creds.Accounts == nil {
 		creds.Accounts = make(map[string]*credentials.MiniMaxAccount)
 		if creds.Cookie != "" {
-			creds.Accounts["default"] = &credentials.MiniMaxAccount{Cookie: creds.Cookie, GroupID: creds.GroupID}
+			creds.Accounts[defaultAccountName] = &credentials.MiniMaxAccount{Cookie: creds.Cookie, GroupID: creds.GroupID}
 			creds.Cookie = ""
 			creds.GroupID = ""
 		}
@@ -238,12 +299,7 @@ func saveMiniMaxCredentials(mgr *credentials.Manager, accountName, cookie, group
 
 	creds.Accounts[accountName] = &credentials.MiniMaxAccount{Cookie: cookie, GroupID: groupID}
 
-	if err := mgr.SaveProvider(providerMiniMax, creds); err != nil {
-		return fmt.Errorf("failed to save credentials: %w", err)
-	}
-
-	fmt.Printf("Successfully added MiniMax account '%s'!\n", accountName)
-	return nil
+	return mgr.SaveProvider(providerMiniMax, creds)
 }
 
 // ListAccounts lists all configured accounts
@@ -281,10 +337,31 @@ func listProviderAccounts(mgr *credentials.Manager, providerID string) error {
 	fmt.Printf("\n%s:\n", providerName(providerID))
 	if len(accounts) == 0 {
 		fmt.Println("  (no accounts configured)")
-	} else {
-		for _, acc := range accounts {
-			fmt.Printf("  - %s\n", acc)
+		return nil
+	}
+
+	// For Claude, show token expiry status alongside each account
+	var claudeCreds *credentials.ClaudeCredentials
+	if providerID == providerClaude {
+		claudeCreds, _ = mgr.LoadClaude()
+	}
+
+	for _, acc := range accounts {
+		status := ""
+		if claudeCreds != nil {
+			if oauth := claudeCreds.GetAccount(acc); oauth != nil && oauth.ExpiresAt > 0 {
+				if oauth.IsExpired() {
+					status = " (token expired"
+					if oauth.RefreshToken != "" {
+						status += ", will auto-refresh"
+					}
+					status += ")"
+				} else {
+					status = fmt.Sprintf(" (token expires in %s)", oauth.ExpiresIn().Round(1e9))
+				}
+			}
 		}
+		fmt.Printf("  - %s%s\n", acc, status)
 	}
 	return nil
 }
@@ -295,102 +372,19 @@ func RemoveAccount(mgr *credentials.Manager, providerID, accountName string) err
 		return fmt.Errorf("account name is required")
 	}
 
-	switch providerID {
-	case "claude":
-		return removeClaudeAccount(mgr, accountName)
-	case "kimi":
-		return removeKimiAccount(mgr, accountName)
-	case "zai":
-		return removeZaiAccount(mgr, accountName)
-	case "minimax":
-		return removeMiniMaxAccount(mgr, accountName)
-	default:
-		return fmt.Errorf("unknown provider: %s", providerID)
+	creds, err := mgr.LoadAccountCredentials(providerID)
+	if err != nil {
+		return err
 	}
-}
-
-// removeClaudeAccount removes a Claude account
-func removeClaudeAccount(mgr *credentials.Manager, accountName string) error {
-	var creds credentials.ClaudeCredentials
-	if err := mgr.LoadProvider("claude", &creds); err != nil {
+	if err := creds.RemoveAccount(accountName); err != nil {
 		return err
 	}
 
-	if creds.Accounts == nil || creds.Accounts[accountName] == nil {
-		return fmt.Errorf("account '%s' not found", accountName)
-	}
-
-	delete(creds.Accounts, accountName)
-
 	// If no accounts left, delete the file
-	if len(creds.Accounts) == 0 {
-		return mgr.DeleteProvider("claude")
+	if len(creds.ListAccounts()) == 0 {
+		return mgr.DeleteProvider(providerID)
 	}
-
-	return mgr.SaveProvider("claude", creds)
-}
-
-// removeKimiAccount removes a Kimi account
-func removeKimiAccount(mgr *credentials.Manager, accountName string) error {
-	var creds credentials.KimiCredentials
-	if err := mgr.LoadProvider("kimi", &creds); err != nil {
-		return err
-	}
-
-	if creds.Accounts == nil || creds.Accounts[accountName] == nil {
-		return fmt.Errorf("account '%s' not found", accountName)
-	}
-
-	delete(creds.Accounts, accountName)
-
-	// If no accounts left, delete the file
-	if len(creds.Accounts) == 0 {
-		return mgr.DeleteProvider("kimi")
-	}
-
-	return mgr.SaveProvider("kimi", creds)
-}
-
-// removeZaiAccount removes a Z.AI account
-func removeZaiAccount(mgr *credentials.Manager, accountName string) error {
-	var creds credentials.ZAiCredentials
-	if err := mgr.LoadProvider("zai", &creds); err != nil {
-		return err
-	}
-
-	if creds.Accounts == nil || creds.Accounts[accountName] == nil {
-		return fmt.Errorf("account '%s' not found", accountName)
-	}
-
-	delete(creds.Accounts, accountName)
-
-	// If no accounts left, delete the file
-	if len(creds.Accounts) == 0 {
-		return mgr.DeleteProvider("zai")
-	}
-
-	return mgr.SaveProvider("zai", creds)
-}
-
-// removeMiniMaxAccount removes a MiniMax account
-func removeMiniMaxAccount(mgr *credentials.Manager, accountName string) error {
-	var creds credentials.MiniMaxCredentials
-	if err := mgr.LoadProvider("minimax", &creds); err != nil {
-		return err
-	}
-
-	if creds.Accounts == nil || creds.Accounts[accountName] == nil {
-		return fmt.Errorf("account '%s' not found", accountName)
-	}
-
-	delete(creds.Accounts, accountName)
-
-	// If no accounts left, delete the file
-	if len(creds.Accounts) == 0 {
-		return mgr.DeleteProvider("minimax")
-	}
-
-	return mgr.SaveProvider("minimax", creds)
+	return mgr.SaveProvider(providerID, creds)
 }
 
 // RenameAccount renames an account for a provider
@@ -399,102 +393,14 @@ func RenameAccount(mgr *credentials.Manager, providerID, oldName, newName string
 		return fmt.Errorf("both old and new account names are required")
 	}
 
-	switch providerID {
-	case "claude":
-		return renameClaudeAccount(mgr, oldName, newName)
-	case "kimi":
-		return renameKimiAccount(mgr, oldName, newName)
-	case "zai":
-		return renameZaiAccount(mgr, oldName, newName)
-	case "minimax":
-		return renameMiniMaxAccount(mgr, oldName, newName)
-	default:
-		return fmt.Errorf("unknown provider: %s", providerID)
-	}
-}
-
-// renameClaudeAccount renames a Claude account
-func renameClaudeAccount(mgr *credentials.Manager, oldName, newName string) error {
-	var creds credentials.ClaudeCredentials
-	if err := mgr.LoadProvider("claude", &creds); err != nil {
+	creds, err := mgr.LoadAccountCredentials(providerID)
+	if err != nil {
 		return err
 	}
-
-	if creds.Accounts == nil || creds.Accounts[oldName] == nil {
-		return fmt.Errorf("account '%s' not found", oldName)
-	}
-
-	if creds.Accounts[newName] != nil {
-		return fmt.Errorf("account '%s' already exists", newName)
-	}
-
-	creds.Accounts[newName] = creds.Accounts[oldName]
-	delete(creds.Accounts, oldName)
-
-	return mgr.SaveProvider("claude", creds)
-}
-
-// renameKimiAccount renames a Kimi account
-func renameKimiAccount(mgr *credentials.Manager, oldName, newName string) error {
-	var creds credentials.KimiCredentials
-	if err := mgr.LoadProvider("kimi", &creds); err != nil {
+	if err := creds.RenameAccount(oldName, newName); err != nil {
 		return err
 	}
-
-	if creds.Accounts == nil || creds.Accounts[oldName] == nil {
-		return fmt.Errorf("account '%s' not found", oldName)
-	}
-
-	if creds.Accounts[newName] != nil {
-		return fmt.Errorf("account '%s' already exists", newName)
-	}
-
-	creds.Accounts[newName] = creds.Accounts[oldName]
-	delete(creds.Accounts, oldName)
-
-	return mgr.SaveProvider("kimi", creds)
-}
-
-// renameZaiAccount renames a Z.AI account
-func renameZaiAccount(mgr *credentials.Manager, oldName, newName string) error {
-	var creds credentials.ZAiCredentials
-	if err := mgr.LoadProvider("zai", &creds); err != nil {
-		return err
-	}
-
-	if creds.Accounts == nil || creds.Accounts[oldName] == nil {
-		return fmt.Errorf("account '%s' not found", oldName)
-	}
-
-	if creds.Accounts[newName] != nil {
-		return fmt.Errorf("account '%s' already exists", newName)
-	}
-
-	creds.Accounts[newName] = creds.Accounts[oldName]
-	delete(creds.Accounts, oldName)
-
-	return mgr.SaveProvider("zai", creds)
-}
-
-// renameMiniMaxAccount renames a MiniMax account
-func renameMiniMaxAccount(mgr *credentials.Manager, oldName, newName string) error {
-	var creds credentials.MiniMaxCredentials
-	if err := mgr.LoadProvider("minimax", &creds); err != nil {
-		return err
-	}
-
-	if creds.Accounts == nil || creds.Accounts[oldName] == nil {
-		return fmt.Errorf("account '%s' not found", oldName)
-	}
-
-	if creds.Accounts[newName] != nil {
-		return fmt.Errorf("account '%s' already exists", newName)
-	}
-
-	creds.Accounts[newName] = creds.Accounts[oldName]
-	delete(creds.Accounts, oldName)
-
-	return mgr.SaveProvider("minimax", creds)
+	return mgr.SaveProvider(providerID, creds)
 }
 
 // MigrateClaudeCLI migrates credentials from the Claude CLI
@@ -509,18 +415,7 @@ func MigrateClaudeCLI(mgr *credentials.Manager) error {
 
 // providerName returns the display name for a provider
 func providerName(id string) string {
-	switch id {
-	case providerClaude:
-		return "Claude (Anthropic)"
-	case providerKimi:
-		return "Kimi"
-	case providerZAi:
-		return "Z.AI"
-	case providerMiniMax:
-		return "MiniMax"
-	default:
-		return strings.ToUpper(id)
-	}
+	return credentials.ProviderDisplayName(id)
 }
 
 // confirm asks the user for confirmation (y/n)
@@ -534,4 +429,20 @@ func readLine() string {
 	reader := bufio.NewReader(os.Stdin)
 	line, _ := reader.ReadString('\n')
 	return strings.TrimSpace(line)
+}
+
+// readSecret prompts for a secret and reads it without echoing to the
+// terminal. Falls back to plain line reading when stdin is not a terminal.
+func readSecret(prompt string) string {
+	fmt.Print(prompt)
+	fd := int(os.Stdin.Fd()) //nolint:gosec // stdin fd is small, no overflow risk
+	if !term.IsTerminal(fd) {
+		return readLine()
+	}
+	secret, err := term.ReadPassword(fd)
+	fmt.Println()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(secret))
 }

@@ -44,7 +44,7 @@ func OutputWaybar(stats *provider.UsageStats) {
 		if p.Error != nil {
 			continue
 		}
-		providerLabel := providerShortName(p.Provider)
+		providerLabel := ProviderShortName(p.Provider)
 		if len(p.Windows) > 0 {
 			// Use the first window's utilization for the compact display
 			textParts = append(textParts, fmt.Sprintf("%s:%.0f%%", providerLabel, p.Windows[0].Utilization))
@@ -241,33 +241,6 @@ func FormatDuration(d time.Duration) string {
 	}
 
 	return strings.Join(parts, " ")
-}
-
-// ProviderName returns the display name for a provider
-func ProviderName(id string) string {
-	switch id {
-	case "claude":
-		return "Claude (Pro/Max Subscription)"
-	case "kimi":
-		return "Kimi"
-	case "zai":
-		return "Z.AI"
-	default:
-		return strings.ToUpper(id)
-	}
-}
-
-func providerShortName(id string) string {
-	switch id {
-	case "claude":
-		return "C"
-	case "kimi":
-		return "K"
-	case "zai":
-		return "Z"
-	default:
-		return string(strings.ToUpper(id)[0])
-	}
 }
 
 // printKimiSubscription prints Kimi subscription info with colors

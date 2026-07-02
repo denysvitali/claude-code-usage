@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/denysvitali/llm-usage/internal/cache"
+	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/provider"
 )
 
@@ -31,7 +32,12 @@ func NewProvider(apiKey string) *Provider {
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return "Kimi"
+	return credentials.ProviderDisplayName(credentials.ProviderKimi)
+}
+
+// ShortName returns the provider's compact label
+func (p *Provider) ShortName() string {
+	return "K"
 }
 
 // ID returns the provider's unique identifier

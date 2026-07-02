@@ -10,6 +10,7 @@ const (
 	screenMainMenu screen = iota
 	screenProviderSelect
 	screenAddAccountName
+	screenAddGroupID
 	screenAddAPIKey
 	screenListAccounts
 	screenRemoveProviderSelect

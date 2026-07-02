@@ -16,13 +16,19 @@ type Provider struct {
 	Name string
 }
 
-// AllProviders contains all providers that can be configured.
-var AllProviders = []Provider{
-	{ID: "claude", Name: "Claude (Anthropic)"},
-	{ID: "kimi", Name: "Kimi"},
-	{ID: "minimax", Name: "MiniMax"},
-	{ID: "zai", Name: "Z.AI"},
-}
+// AllProviders contains all providers that can be configured, derived from
+// the central provider registry.
+var AllProviders = func() []Provider {
+	providers := make([]Provider, 0, len(credentials.Providers))
+	for _, p := range credentials.Providers {
+		name := p.Name
+		if p.ID == credentials.ProviderZAi {
+			name += " (usage fetching not yet implemented)"
+		}
+		providers = append(providers, Provider{ID: p.ID, Name: name})
+	}
+	return providers
+}()
 
 // Model represents the state of the TUI
 type Model struct {
@@ -41,6 +47,7 @@ type Model struct {
 	selectedProvider string
 	selectedAccount  string
 	accountName      string // Name for new account being added
+	groupID          string // MiniMax group ID being added
 	accounts         []string
 	confirmRemove    bool
 
@@ -142,6 +149,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case screenAddAccountName:
 		return m.updateAddAccountName(msg)
 
+	case screenAddGroupID:
+		return m.updateAddGroupID(msg)
+
 	case screenAddAPIKey:
 		return m.updateAddAPIKey(msg)
 
@@ -183,6 +193,9 @@ func (m Model) View() string {
 	case screenAddAccountName:
 		content.WriteString(m.viewAddAccountName())
 
+	case screenAddGroupID:
+		content.WriteString(m.viewAddGroupID())
+
 	case screenAddAPIKey:
 		content.WriteString(m.viewAddAPIKey())
 
@@ -221,6 +234,7 @@ func (m Model) returnToMainMenu() (tea.Model, tea.Cmd) {
 	m.selectedProvider = ""
 	m.selectedAccount = ""
 	m.accountName = ""
+	m.groupID = ""
 	m.accounts = nil
 	m.confirmRemove = false
 	m.screenHistory = []screen{}

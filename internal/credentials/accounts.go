@@ -1,0 +1,171 @@
+package credentials
+
+import "fmt"
+
+// Provider IDs for all supported providers.
+const (
+	ProviderClaude  = "claude"
+	ProviderKimi    = "kimi"
+	ProviderZAi     = "zai"
+	ProviderMiniMax = "minimax"
+
+	// DefaultAccountName is the account name used when none is specified.
+	DefaultAccountName = "default"
+)
+
+// ProviderInfo describes a supported provider.
+type ProviderInfo struct {
+	ID   string
+	Name string
+}
+
+// Providers lists all supported providers with their display names.
+var Providers = []ProviderInfo{
+	{ID: ProviderClaude, Name: "Claude (Anthropic)"},
+	{ID: ProviderKimi, Name: "Kimi"},
+	{ID: ProviderMiniMax, Name: "MiniMax"},
+	{ID: ProviderZAi, Name: "Z.AI"},
+}
+
+// ProviderDisplayName returns the display name for a provider ID.
+func ProviderDisplayName(id string) string {
+	for _, p := range Providers {
+		if p.ID == id {
+			return p.Name
+		}
+	}
+	return id
+}
+
+// AccountCredentials is the generic interface implemented by every
+// provider's credential structure. It provides uniform account management
+// so callers never need per-provider switch statements.
+type AccountCredentials interface {
+	ProviderConfig
+
+	// ID returns the provider's unique identifier.
+	ID() string
+	// Name returns the provider's display name.
+	Name() string
+	// ListAccounts returns all configured account names.
+	ListAccounts() []string
+	// RemoveAccount deletes an account by name.
+	RemoveAccount(name string) error
+	// RenameAccount renames an account.
+	RenameAccount(oldName, newName string) error
+}
+
+// NewCredentials returns an empty credentials structure for the provider.
+func NewCredentials(providerID string) (AccountCredentials, error) {
+	switch providerID {
+	case ProviderClaude:
+		return &ClaudeCredentials{}, nil
+	case ProviderKimi:
+		return &KimiCredentials{}, nil
+	case ProviderZAi:
+		return &ZAiCredentials{}, nil
+	case ProviderMiniMax:
+		return &MiniMaxCredentials{}, nil
+	default:
+		return nil, fmt.Errorf("unknown provider: %s", providerID)
+	}
+}
+
+// LoadAccountCredentials loads a provider's credentials behind the generic
+// AccountCredentials interface.
+func (m *Manager) LoadAccountCredentials(providerID string) (AccountCredentials, error) {
+	creds, err := NewCredentials(providerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.LoadProvider(providerID, creds); err != nil {
+		return nil, err
+	}
+	return creds, nil
+}
+
+// removeFromAccounts removes an account from a provider's accounts map.
+func removeFromAccounts[T any](accounts map[string]*T, name string) error {
+	if accounts == nil || accounts[name] == nil {
+		return fmt.Errorf("account '%s' not found", name)
+	}
+	delete(accounts, name)
+	return nil
+}
+
+// renameInAccounts renames an account within a provider's accounts map.
+func renameInAccounts[T any](accounts map[string]*T, oldName, newName string) error {
+	if accounts == nil || accounts[oldName] == nil {
+		return fmt.Errorf("account '%s' not found", oldName)
+	}
+	if accounts[newName] != nil {
+		return fmt.Errorf("account '%s' already exists", newName)
+	}
+	accounts[newName] = accounts[oldName]
+	delete(accounts, oldName)
+	return nil
+}
+
+// ID returns the provider's unique identifier.
+func (c *ClaudeCredentials) ID() string { return ProviderClaude }
+
+// Name returns the provider's display name.
+func (c *ClaudeCredentials) Name() string { return ProviderDisplayName(ProviderClaude) }
+
+// RemoveAccount deletes an account by name.
+func (c *ClaudeCredentials) RemoveAccount(name string) error {
+	return removeFromAccounts(c.Accounts, name)
+}
+
+// RenameAccount renames an account.
+func (c *ClaudeCredentials) RenameAccount(oldName, newName string) error {
+	return renameInAccounts(c.Accounts, oldName, newName)
+}
+
+// ID returns the provider's unique identifier.
+func (k *KimiCredentials) ID() string { return ProviderKimi }
+
+// Name returns the provider's display name.
+func (k *KimiCredentials) Name() string { return ProviderDisplayName(ProviderKimi) }
+
+// RemoveAccount deletes an account by name.
+func (k *KimiCredentials) RemoveAccount(name string) error {
+	return removeFromAccounts(k.Accounts, name)
+}
+
+// RenameAccount renames an account.
+func (k *KimiCredentials) RenameAccount(oldName, newName string) error {
+	return renameInAccounts(k.Accounts, oldName, newName)
+}
+
+// ID returns the provider's unique identifier.
+func (z *ZAiCredentials) ID() string { return ProviderZAi }
+
+// Name returns the provider's display name.
+func (z *ZAiCredentials) Name() string { return ProviderDisplayName(ProviderZAi) }
+
+// RemoveAccount deletes an account by name.
+func (z *ZAiCredentials) RemoveAccount(name string) error {
+	return removeFromAccounts(z.Accounts, name)
+}
+
+// RenameAccount renames an account.
+func (z *ZAiCredentials) RenameAccount(oldName, newName string) error {
+	return renameInAccounts(z.Accounts, oldName, newName)
+}
+
+// ID returns the provider's unique identifier.
+func (m *MiniMaxCredentials) ID() string { return ProviderMiniMax }
+
+// Name returns the provider's display name.
+func (m *MiniMaxCredentials) Name() string { return ProviderDisplayName(ProviderMiniMax) }
+
+// RemoveAccount deletes an account by name.
+func (m *MiniMaxCredentials) RemoveAccount(name string) error {
+	return removeFromAccounts(m.Accounts, name)
+}
+
+// RenameAccount renames an account.
+func (m *MiniMaxCredentials) RenameAccount(oldName, newName string) error {
+	return renameInAccounts(m.Accounts, oldName, newName)
+}

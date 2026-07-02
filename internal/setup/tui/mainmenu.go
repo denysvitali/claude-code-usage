@@ -82,7 +82,7 @@ func (m Model) viewFooter() string {
 		bindings = []string{"↑/k", "↓/j", "enter", "q"}
 	case screenProviderSelect, screenRemoveProviderSelect:
 		bindings = []string{"↑/k", "↓/j", "enter", "esc"}
-	case screenAddAccountName, screenAddAPIKey:
+	case screenAddAccountName, screenAddGroupID, screenAddAPIKey:
 		bindings = []string{"type", "enter", "esc"}
 	case screenListAccounts:
 		bindings = []string{"esc"}
