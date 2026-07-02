@@ -2,8 +2,6 @@
 package usage
 
 import (
-	"encoding/json"
-	"os"
 	"strings"
 	"sync"
 
@@ -28,31 +26,15 @@ type ProviderInstance struct {
 	AccountName string
 }
 
-// LoadClaudeFromKeychain tries to load Claude credentials from the CLI keychain location
+// LoadClaudeFromKeychain tries to load Claude credentials from the CLI's storage location:
+// the macOS Keychain first, falling back to ~/.claude/.credentials.json.
 func LoadClaudeFromKeychain() (*credentials.OAuthCredentials, string, error) {
-	homeDir, err := os.UserHomeDir()
+	creds, err := credentials.Load()
 	if err != nil {
 		return nil, "", err
 	}
 
-	credPath := homeDir + "/.claude/.credentials.json"
-	data, err := os.ReadFile(credPath) //nolint:gosec // Path is constructed from home directory
-	if err != nil {
-		return nil, "", err
-	}
-
-	var result struct {
-		ClaudeAiOauth *credentials.OAuthCredentials `json:"claudeAiOauth"`
-	}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, "", err
-	}
-
-	if result.ClaudeAiOauth == nil || result.ClaudeAiOauth.AccessToken == "" {
-		return nil, "", ErrNoValidCredentials
-	}
-
-	return result.ClaudeAiOauth, "default", nil
+	return creds.ClaudeAiOauth, "default", nil
 }
 
 // GetProviders returns the list of providers to query based on the flags

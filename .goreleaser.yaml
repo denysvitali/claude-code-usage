@@ -8,15 +8,26 @@ before:
     - go mod tidy
 
 builds:
-  - id: llm-usage
-    main: ./cmd/llm-usage
+  - id: llm-usage-cross
+    main: .
     binary: llm-usage
     env:
       - CGO_ENABLED=0
     goos:
       - linux
-      - darwin
       - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/denysvitali/llm-usage/internal/version.Version={{.Version}}
+  - id: llm-usage-darwin
+    main: .
+    binary: llm-usage
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
     goarch:
       - amd64
       - arm64
