@@ -1,189 +1,290 @@
 # llm-usage
 
-A CLI tool to display your LLM API usage statistics across multiple providers (Claude, Kimi, MiniMax, Z.AI).
+`llm-usage` is a Go CLI for checking subscription and quota usage across
+multiple LLM providers. It is designed for both humans at a terminal and
+small integrations such as Waybar, scripts, and a local HTTP server.
 
-## Features
+## What it does
 
-- View real-time usage statistics from multiple LLM providers
-- Multiple named accounts per provider
-- Multiple output formats: pretty-printed, JSON, and Waybar-compatible
-- Web UI with JSON API (`llm-usage serve`)
-- Interactive setup wizard and automatic Claude CLI credential migration
-- Automatic Claude OAuth token refresh
-- Visual progress bars showing usage utilization and reset times
+- Queries Claude, Codex, Grok, Kimi, MiniMax, and Z.AI through one interface.
+- Discovers existing Codex and Grok CLI sessions without asking you to copy
+  tokens into another configuration file.
+- Supports named accounts for providers that use llm-usage-managed
+  credentials.
+- Renders Lip Gloss terminal output, JSON, and Waybar-compatible JSON.
+- Provides setup, diagnostics, shell completion, continuous refresh, and a
+  local web server.
+- Exposes reusable public provider packages for Go applications.
 
-## Supported Providers
+## Providers and authentication
 
-| Provider | Status | Auth Type |
-|----------|--------|-----------|
-| Claude   | ✅ Implemented | OAuth (migrated from the Claude CLI, or manual tokens) |
-| Kimi     | ✅ Implemented | API key |
-| MiniMax  | ✅ Implemented | Cookie + Group ID |
-| Z.AI     | 🔜 Planned | API key (credentials can be stored, usage fetching pending) |
+| ID | Provider | Authentication | Usage |
+| --- | --- | --- | --- |
+| `claude` | Claude (Anthropic) | Claude CLI session, or managed OAuth credentials | Implemented |
+| `codex` | Codex (OpenAI) | Codex CLI session in `~/.codex/auth.json` | Implemented |
+| `grok` | Grok (xAI) | Grok CLI session in `~/.grok/auth.json` | Implemented |
+| `kimi` | Kimi | Managed API key | Implemented |
+| `minimax` | MiniMax | Managed cookie and group ID | Implemented |
+| `zai` | Z.AI | Managed API key | Credential storage only |
 
-## Installation
+Codex and Grok are automatically included when their local CLI sessions are
+available. They do not need a `setup add` step. Claude credentials can be
+read from the Claude CLI or migrated into llm-usage-managed storage.
 
-### From Source
+## Install
+
+From source:
 
 ```bash
 go install github.com/denysvitali/llm-usage@latest
 ```
 
-### From Releases
+Or download a platform binary from the
+[releases page](https://github.com/denysvitali/llm-usage/releases).
 
-Download the appropriate binary for your platform from the [Releases](https://github.com/denysvitali/llm-usage/releases) page.
+## Quick start
 
-## Getting Started
+If you already use Codex or Grok locally, this is enough:
 
-Run the interactive setup wizard:
+```bash
+llm-usage
+```
+
+Select providers explicitly when you want a predictable result:
+
+```bash
+llm-usage --provider=codex,grok
+llm-usage --provider=claude,kimi --timeout=10s
+```
+
+Useful checks:
+
+```bash
+llm-usage provider list
+llm-usage doctor
+llm-usage --help
+```
+
+The command returns a non-zero status when every selected provider fails.
+Waybar output always returns zero so a temporary provider error does not stop
+the bar module.
+
+## CLI reference
+
+### Query usage
+
+```bash
+# Human-readable terminal output
+llm-usage
+
+# One provider or a comma-separated selection
+llm-usage --provider=codex
+llm-usage --provider=claude,kimi
+
+# Select a managed account
+llm-usage --provider=kimi --account=work
+
+# Query every account for a provider
+llm-usage --provider=kimi --all-accounts
+
+# Machine-readable output
+llm-usage --json
+llm-usage --waybar
+
+# Include provider response details when debugging an integration
+llm-usage --provider=codex --debug
+
+# Bound slow provider requests
+llm-usage --timeout=15s
+```
+
+The provider selector accepts `all` or these IDs: `claude`, `codex`, `grok`,
+`kimi`, `minimax`, and `zai`.
+
+### Configure managed credentials
+
+Launch the interactive setup wizard:
 
 ```bash
 llm-usage setup
 ```
 
-Or configure providers directly:
+Non-interactive account management commands:
 
 ```bash
-# Migrate Claude credentials from the Claude CLI (macOS Keychain or ~/.claude/.credentials.json)
-llm-usage setup migrate-claude
-
-# Add accounts (prompts for credentials; keys are not echoed)
 llm-usage setup add claude
-llm-usage setup add kimi
-llm-usage setup add minimax --account work
-
-# Manage accounts
+llm-usage setup add kimi --account=work
+llm-usage setup add minimax --account=personal
 llm-usage setup list
-llm-usage setup rename kimi default personal
-llm-usage setup remove kimi personal
+llm-usage setup list kimi
+llm-usage setup rename kimi work home
+llm-usage setup remove kimi home --yes
+llm-usage setup migrate-claude
 ```
 
-For Claude, the easiest path is having the [Claude CLI](https://github.com/anthropics/claude-code) installed and authenticated — its credentials are picked up automatically (macOS Keychain or `~/.claude/.credentials.json`). Expired tokens are refreshed automatically when a refresh token is available.
+`setup migrate-claude` imports credentials from the Claude CLI when needed.
+Codex and Grok should be authenticated with their own CLIs instead.
 
-## Usage
+### Configuration and diagnostics
 
 ```bash
-# Show all configured providers (default)
-llm-usage
-
-# Show one or more specific providers
-llm-usage --provider=claude
-llm-usage --provider=claude,kimi
-
-# Show a specific account
-llm-usage --provider=kimi --account=work
-
-# JSON output
-llm-usage --json
-
-# Waybar-compatible JSON output
-llm-usage --waybar
-
-# Include raw provider API responses
-llm-usage --debug
-
-# Show version
-llm-usage --version
+llm-usage config init
+llm-usage config path
+llm-usage config validate
+llm-usage config --file ./llm-usage.yaml validate
+llm-usage doctor
 ```
 
-The command exits non-zero if every provider fails (except with `--waybar`, which always exits 0 so the bar module keeps rendering).
-
-### Web UI
+The default configuration directory is `$XDG_CONFIG_HOME/llm-usage`, or
+`~/.config/llm-usage` when `XDG_CONFIG_HOME` is unset. Use
+`--credentials-file` to load a combined credentials file, which is useful for
+CI and secret managers:
 
 ```bash
-# Start the web server (default: http://localhost:8080)
+llm-usage --credentials-file ./credentials.json --provider=kimi
+```
+
+Values in that file may reference environment variables with `$VAR` or
+`${VAR}`. Do not commit the file.
+
+### Watch and serve
+
+Refresh the terminal view continuously:
+
+```bash
+llm-usage watch
+llm-usage watch --provider=codex,grok --interval=2m
+```
+
+Start the local web UI and JSON API:
+
+```bash
 llm-usage serve
-llm-usage serve --host 0.0.0.0 --port 9090
+llm-usage serve --host=127.0.0.1 --port=9090
 ```
 
-### Configuration
+The default server address is `http://localhost:8080`. Use `--web-dir` when
+the web assets are stored outside the repository.
 
-Credentials are stored following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html), in `$XDG_CONFIG_HOME/llm-usage/` (defaults to `~/.config/llm-usage/`):
-
-- `claude.json` - Claude OAuth credentials
-- `kimi.json` - Kimi API credentials
-- `minimax.json` - MiniMax cookie + group ID credentials
-- `zai.json` - Z.AI API credentials
-
-Each file supports multiple named accounts.
-
-#### Combined credentials file
-
-Alternatively, pass a single credentials file whose values may reference environment variables (`$VAR` or `${VAR}`), useful for CI or secret managers:
+### Shell completion
 
 ```bash
-llm-usage --credentials-file=creds.json
+llm-usage completion zsh > "${fpath[1]}/_llm-usage"
+llm-usage completion bash > /etc/bash_completion.d/llm-usage
+llm-usage completion fish > ~/.config/fish/completions/llm-usage.fish
+llm-usage completion powershell > llm-usage.ps1
 ```
+
+## Waybar
+
+Use separate modules when you want each provider to have its own icon, color,
+and status. The Waybar output contains `text`, `tooltip`, and a CSS class.
 
 ```json
 {
-  "claude": { "accounts": { "default": { "accessToken": "$CLAUDE_TOKEN" } } },
-  "kimi":   { "accounts": { "default": { "apiKey": "$KIMI_API_KEY" } } }
-}
-```
-
-### Example Output
-
-```
-LLM Usage Statistics
-====================
-
-Claude (Anthropic):
---------------------------------
-  5-Hour Window:
-    Usage:    [████████████░░░░░░░░] 60.0%
-    Resets:   in 2h 15m
-  7-Day Window:
-    Usage:    [██████░░░░░░░░░░░░░░] 30.0%
-    Resets:   in 3d 5h
-
-Kimi (default):
---------------------------------
-  Daily Usage:
-    Usage:    [████░░░░░░░░░░░░░░░░] 20.0%
-```
-
-### Waybar Integration
-
-Add this to your Waybar config:
-
-```json
-{
-  "custom/llm-usage": {
-    "exec": "llm-usage --waybar",
+  "modules-center": ["clock", "custom/codex-usage", "custom/grok-usage"],
+  "custom/codex-usage": {
+    "exec": "llm-usage --provider=codex --waybar",
     "return-type": "json",
-    "interval": 300
+    "interval": 300,
+    "escape": false,
+    "tooltip": true,
+    "format": "{}"
+  },
+  "custom/grok-usage": {
+    "exec": "llm-usage --provider=grok --waybar",
+    "return-type": "json",
+    "interval": 300,
+    "escape": false,
+    "tooltip": true,
+    "format": "{}"
   }
 }
 ```
 
-## Building from Source
+Codex displays its 5-hour and 7-day windows in order. Grok displays its
+weekly window. Use `llm-usage --waybar` without `--provider` for one combined
+module instead.
 
-```bash
-# Clone the repository
-git clone https://github.com/denysvitali/llm-usage.git
-cd llm-usage
+## JSON output
 
-# Build
-make build
+`--json` emits normalized provider reports. Each report contains a provider
+ID, zero or more usage windows, optional provider-specific `extra` data, and a
+normalized error when the provider is unavailable.
 
-# Or install directly
-make install
+```json
+{
+  "providers": [
+    {
+      "provider": "codex",
+      "windows": [
+        {"label": "5-Hour", "utilization": 8, "resets_at": "..."},
+        {"label": "7-Day", "utilization": 17, "resets_at": "..."}
+      ]
+    }
+  ]
+}
 ```
+
+Provider failures are represented in the response instead of being mixed into
+the normal usage text. This makes the output safe to consume from scripts.
+
+## Go library
+
+The normalized types live in the public `provider` package. Provider-specific
+clients are available under `providers/<name>` and accept caller-owned context,
+credentials, and HTTP clients where applicable.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/denysvitali/llm-usage/providers/grok"
+)
+
+func main() {
+	client, err := grok.NewClient(grok.ClientOptions{AccessToken: "token"})
+	if err != nil {
+		panic(err)
+	}
+	usage, err := client.GetUsage(context.Background())
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(usage.Windows)
+}
+```
+
+The public registry in `providers` exposes provider capabilities and the
+application-facing loading contract. Credential discovery remains internal to
+the CLI so reusable clients do not depend on local config files.
 
 ## Development
 
+Requirements: Go 1.23 or newer.
+
 ```bash
-# Run linter
-make lint
+git clone https://github.com/denysvitali/llm-usage.git
+cd llm-usage
 
-# Run tests
+make fmt
 make test
+make lint
+make build
+```
 
-# Build and test everything
+Run the complete local verification target with:
+
+```bash
 make all
 ```
 
+Build artifacts such as `llm-usage`, coverage reports, credentials, and local
+CLI session files should remain uncommitted.
+
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE).

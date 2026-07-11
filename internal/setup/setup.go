@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/denysvitali/llm-usage/internal/credentials"
-	"github.com/denysvitali/llm-usage/internal/provider"
-	"github.com/denysvitali/llm-usage/internal/provider/claude"
-	"github.com/denysvitali/llm-usage/internal/provider/kimi"
-	"github.com/denysvitali/llm-usage/internal/provider/minimax"
+	"github.com/denysvitali/llm-usage/provider"
+	"github.com/denysvitali/llm-usage/providers/claude"
+	"github.com/denysvitali/llm-usage/providers/kimi"
+	"github.com/denysvitali/llm-usage/providers/minimax"
 	"golang.org/x/term"
 )
 
@@ -65,9 +65,26 @@ func AddAccount(mgr *credentials.Manager, providerID, accountName string) error 
 		return addAPIKeyAccount(mgr, providerZAi, accountName)
 	case providerMiniMax:
 		return addMiniMaxAccount(mgr, accountName)
+	case credentials.ProviderCodex:
+		return addCodexAccount()
+	case credentials.ProviderGrok:
+		return fmt.Errorf("Grok consumer quota is configured through grok.json; see 'llm-usage --help'")
 	default:
 		return fmt.Errorf("unknown provider: %s", providerID)
 	}
+}
+
+func addCodexAccount() error {
+	creds, err := credentials.LoadCodexCLI()
+	if err != nil {
+		return fmt.Errorf("Codex CLI authentication not found: %w", err)
+	}
+	account := defaultAccountName
+	if creds.Tokens.AccountID != "" {
+		account = creds.Tokens.AccountID
+	}
+	fmt.Printf("Codex CLI credentials detected (account %s).\n", account)
+	return nil
 }
 
 // addClaudeAccount adds a Claude account, either by migrating from the Claude

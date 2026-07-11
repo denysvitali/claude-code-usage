@@ -5,21 +5,33 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/denysvitali/llm-usage/internal/provider"
+	"github.com/denysvitali/llm-usage/provider"
 )
 
 // Lipgloss styles for subscription display
 var (
-	subscriptionTitleStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Bold(true)
-	statusActiveStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("70"))
-	statusCancelledStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	statusExpiredStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	dimStyle               = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	featureNameStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	titleStyle               = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")).Background(lipgloss.Color("63")).Padding(0, 1)
+	providerTitleStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
+	accountStyle             = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
+	windowLabelStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+	valueStyle               = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
+	unavailableTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	unavailableProviderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("255"))
+	errorStyle               = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	dividerStyle             = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
+	subtitleStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("246"))
+	metricLabelStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Width(8)
+	subscriptionTitleStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("86")).Bold(true)
+	statusActiveStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("70"))
+	statusCancelledStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	statusExpiredStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	dimStyle                 = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	featureNameStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
 )
 
 const (
@@ -40,17 +52,24 @@ type WaybarOutput struct {
 func OutputWaybar(stats *provider.UsageStats) {
 	// Build compact text for the bar
 	var textParts []string
+	failedProviders := make(map[string]error)
 	for _, p := range stats.Providers {
 		if p.Error != nil {
+			if _, seen := failedProviders[p.Provider]; !seen {
+				failedProviders[p.Provider] = p.Error
+			}
 			continue
 		}
-		providerLabel := ProviderShortName(p.Provider)
+		providerLabel := ProviderWaybarIcon(p.Provider)
 		if len(p.Windows) > 0 {
-			// Use the first window's utilization for the compact display
-			textParts = append(textParts, fmt.Sprintf("%s:%.0f%%", providerLabel, p.Windows[0].Utilization))
+			values := make([]string, 0, len(p.Windows))
+			for _, window := range p.Windows {
+				values = append(values, fmt.Sprintf("%.0f%%", window.Utilization))
+			}
+			textParts = append(textParts, fmt.Sprintf("%s %s", providerLabel, strings.Join(values, " · ")))
 		}
 	}
-	text := strings.Join(textParts, " ")
+	text := strings.Join(textParts, "  ·  ")
 
 	// Build detailed tooltip
 	var tooltipLines []string
@@ -59,7 +78,6 @@ func OutputWaybar(stats *provider.UsageStats) {
 
 	for _, p := range stats.Providers {
 		if p.Error != nil {
-			tooltipLines = append(tooltipLines, fmt.Sprintf("%s: Error", ProviderName(p.Provider)))
 			continue
 		}
 
@@ -77,6 +95,12 @@ func OutputWaybar(stats *provider.UsageStats) {
 			tooltipLines = append(tooltipLines, line)
 		}
 	}
+	if len(failedProviders) > 0 {
+		tooltipLines = append(tooltipLines, "", "Unavailable:")
+		for _, id := range sortedProviderIDs(failedProviders) {
+			tooltipLines = append(tooltipLines, fmt.Sprintf("%s: %s", ProviderName(id), conciseError(failedProviders[id])))
+		}
+	}
 
 	output := WaybarOutput{
 		Text:       text,
@@ -89,6 +113,28 @@ func OutputWaybar(stats *provider.UsageStats) {
 	if err := enc.Encode(output); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
 	}
+}
+
+// ProviderWaybarIcon returns a compact glyph for status-bar output. The
+// OpenAI mark comes from Font Awesome Brands; the xAI mark identifies Grok.
+func ProviderWaybarIcon(id string) string {
+	switch id {
+	case "codex":
+		return "<span font_family=\"Font Awesome 7 Brands\">\ue7cf</span>"
+	case "grok":
+		return "𝕏"
+	default:
+		return ProviderShortName(id)
+	}
+}
+
+func sortedProviderIDs(failures map[string]error) []string {
+	ids := make([]string, 0, len(failures))
+	for id := range failures {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // OutputWaybarError outputs an error in waybar JSON format
@@ -111,21 +157,32 @@ func OutputJSON(stats *provider.UsageStats) {
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(stats); err != nil {
 		fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
-		os.Exit(1)
 	}
 }
 
 // OutputPretty outputs usage stats in a pretty-printed format
 func OutputPretty(stats *provider.UsageStats) {
-	fmt.Println("LLM Usage Statistics")
-	fmt.Println("====================")
+	fmt.Println(titleStyle.Render("LLM Usage Statistics"))
+	healthy, unavailable := summaryCounts(stats)
+	if healthy+unavailable > 0 {
+		summary := fmt.Sprintf("%d healthy", healthy)
+		if unavailable > 0 {
+			summary += fmt.Sprintf("  ·  %d unavailable", unavailable)
+		}
+		if max := stats.MaxUtilization(); max > 0 {
+			summary += fmt.Sprintf("  ·  peak %.0f%%", max)
+		}
+		fmt.Println(subtitleStyle.Render(summary + "  ·  updated " + time.Now().Format("15:04:05")))
+	}
 	fmt.Println()
 
+	var failures []provider.Usage
 	for _, p := range stats.Providers {
 		if p.Error != nil {
-			fmt.Printf("%s:\n", ProviderName(p.Provider))
-			fmt.Printf("  Error: %s\n", p.Error)
-			fmt.Println()
+			failures = append(failures, p)
+			continue
+		}
+		if len(p.Windows) == 0 && !hasDisplayableExtra(p.Extra) {
 			continue
 		}
 
@@ -135,8 +192,12 @@ func OutputPretty(stats *provider.UsageStats) {
 			accountSuffix = fmt.Sprintf(" (%s)", acc)
 		}
 
-		fmt.Printf("%s%s:\n", ProviderName(p.Provider), accountSuffix)
-		fmt.Println(strings.Repeat("-", len(ProviderName(p.Provider))+len(accountSuffix)+1))
+		providerTitle := providerTitleStyle.Render("▸ " + ProviderName(p.Provider))
+		if accountSuffix != "" {
+			providerTitle += " " + accountStyle.Render(accountSuffix)
+		}
+		fmt.Println(providerTitle)
+		fmt.Println(dividerStyle.Render(strings.Repeat("─", 34)))
 
 		for _, w := range p.Windows {
 			printUsageWindow(w.Label, &w)
@@ -148,7 +209,7 @@ func OutputPretty(stats *provider.UsageStats) {
 		}
 
 		// Print subscription info if available (for Kimi)
-		if sub, ok := p.Extra["subscription"]; ok {
+		if sub, ok := p.Extra["subscription"]; ok && hasSubscriptionContent(sub) {
 			printKimiSubscription(sub)
 		}
 
@@ -158,6 +219,78 @@ func OutputPretty(stats *provider.UsageStats) {
 		}
 
 		fmt.Println()
+	}
+
+	seen := make(map[string]bool)
+	for _, p := range failures {
+		if seen[p.Provider] {
+			continue
+		}
+		seen[p.Provider] = true
+	}
+	if len(seen) > 0 {
+		fmt.Println(unavailableTitleStyle.Render("Unavailable"))
+		for _, p := range failures {
+			if !seen[p.Provider] {
+				continue
+			}
+			delete(seen, p.Provider)
+			fmt.Printf("  %-20s %s\n", unavailableProviderStyle.Render(ProviderName(p.Provider)), errorStyle.Render(conciseError(p.Error)))
+		}
+	}
+}
+
+func summaryCounts(stats *provider.UsageStats) (healthy, unavailable int) {
+	seenFailures := make(map[string]bool)
+	for _, p := range stats.Providers {
+		if p.Error != nil {
+			if !seenFailures[p.Provider] {
+				unavailable++
+				seenFailures[p.Provider] = true
+			}
+			continue
+		}
+		if len(p.Windows) > 0 || hasDisplayableExtra(p.Extra) {
+			healthy++
+		}
+	}
+	return healthy, unavailable
+}
+
+func hasDisplayableExtra(extra map[string]any) bool {
+	if extra == nil {
+		return false
+	}
+	if value, ok := extra["extra_usage"]; ok {
+		return hasSubscriptionContent(value)
+	}
+	if value, ok := extra["subscription"]; ok {
+		return hasSubscriptionContent(value)
+	}
+	return false
+}
+
+func hasSubscriptionContent(value any) bool {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	return len(m) > 0
+}
+
+func conciseError(err error) string {
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "quota snapshot") || strings.Contains(message, "does not expose weekly quota"):
+		return "weekly quota snapshot required"
+	case strings.Contains(message, "401") || strings.Contains(message, "unauthenticated") || strings.Contains(message, "invalid_grant") || strings.Contains(message, "token") && strings.Contains(message, "expired"):
+		return "authentication required"
+	case strings.Contains(message, "timeout") || strings.Contains(message, "deadline exceeded"):
+		return "request timed out"
+	case strings.Contains(message, "429") || strings.Contains(message, "rate limit"):
+		return "rate limited"
+	default:
+		return "temporarily unavailable"
 	}
 }
 
@@ -199,15 +332,26 @@ func printExtraUsageFromMap(extra any) {
 }
 
 func printUsageWindow(label string, window *provider.UsageWindow) {
-	fmt.Printf("  %s:\n", label)
+	fmt.Printf("  %s:\n", windowLabelStyle.Render(label))
 
 	bar := RenderProgressBar(window.Utilization)
-	fmt.Printf("    Usage:    %s  %.1f%%\n", bar, window.Utilization)
+	fmt.Printf("    %s %s  %s\n", metricLabelStyle.Render("Usage:"), bar, utilizationStyle(window.Utilization).Render(fmt.Sprintf("%.1f%%", window.Utilization)))
 
 	if resetDur := window.TimeUntilReset(); resetDur != nil {
-		fmt.Printf("    Resets:   in %s\n", FormatDuration(*resetDur))
+		fmt.Printf("    %s %s\n", metricLabelStyle.Render("Resets:"), valueStyle.Render("in "+FormatDuration(*resetDur)))
 	} else {
-		fmt.Printf("    Resets:   N/A\n")
+		fmt.Printf("    %s %s\n", metricLabelStyle.Render("Resets:"), dimStyle.Render("N/A"))
+	}
+}
+
+func utilizationStyle(value float64) lipgloss.Style {
+	switch {
+	case value >= 90:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	case value >= 75:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	default:
+		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("70"))
 	}
 }
 
@@ -216,7 +360,19 @@ func RenderProgressBar(percentage float64) string {
 	filled := int(percentage / 100 * float64(barWidth))
 	filled = max(0, min(filled, barWidth))
 
-	return strings.Repeat(barFull, filled) + strings.Repeat(barEmpty, barWidth-filled)
+	bar := strings.Repeat(barFull, filled) + strings.Repeat(barEmpty, barWidth-filled)
+	return progressStyle(percentage).Render(bar)
+}
+
+func progressStyle(value float64) lipgloss.Style {
+	switch {
+	case value >= 90:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	case value >= 75:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	default:
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("70"))
+	}
 }
 
 // FormatDuration formats a duration for human-readable output
@@ -251,6 +407,15 @@ func printKimiSubscription(sub any) {
 	}
 
 	fmt.Println(subscriptionTitleStyle.Render("Subscription:"))
+	if subscribed, ok := subMap["subscribed"].(bool); ok {
+		status := "Inactive"
+		style := statusExpiredStyle
+		if subscribed {
+			status = "Active"
+			style = statusActiveStyle
+		}
+		fmt.Printf("  %s %s\n", metricLabelStyle.Render("Status:"), style.Render(status))
+	}
 
 	// Print plan info
 	if plan, ok := subMap["plan"].(map[string]any); ok {
@@ -271,7 +436,14 @@ func printKimiSubscription(sub any) {
 			styledStatus = status
 		}
 
-		fmt.Printf("  Plan:     %s %s %s\n", title, dimStyle.Render("("+level+")"), styledStatus)
+		planName := title
+		if planName == "" {
+			planName = "Subscription"
+		}
+		if level != "" {
+			planName += " " + dimStyle.Render("("+level+")")
+		}
+		fmt.Printf("  %s %s %s\n", metricLabelStyle.Render("Plan:"), planName, styledStatus)
 	}
 
 	// Print expiry info
@@ -289,27 +461,43 @@ func printKimiSubscription(sub any) {
 	}
 
 	// Print features/quotas
-	if features, ok := subMap["features"].([]any); ok && len(features) > 0 {
-		fmt.Println("  Features:")
-		for _, f := range features {
-			if feature, ok := f.(map[string]any); ok {
-				name := getStringValue(feature, "feature")
-				left := getIntValue(feature, "left")
-				total := getIntValue(feature, "total")
+	features := subscriptionFeatures(subMap["features"])
+	if len(features) > 0 {
+		fmt.Println("  " + subscriptionTitleStyle.Render("Included quotas:"))
+		for _, feature := range features {
+			name := getStringValue(feature, "feature")
+			left := getIntValue(feature, "left")
+			total := getIntValue(feature, "total")
 
-				// Calculate percentage for progress bar
-				var percentage float64
-				if total > 0 {
-					percentage = float64(total-left) / float64(total) * 100
-				}
-				bar := RenderProgressBar(percentage)
+			// Calculate percentage for progress bar
+			var percentage float64
+			if total > 0 {
+				percentage = float64(total-left) / float64(total) * 100
+			}
+			bar := RenderProgressBar(percentage)
 
-				fmt.Printf("    %s: %s %s\n",
-					featureNameStyle.Render(name),
-					bar,
-					dimStyle.Render(fmt.Sprintf("%d/%d left", left, total)))
+			fmt.Printf("    %-12s %s %s\n",
+				featureNameStyle.Render(name),
+				bar,
+				dimStyle.Render(fmt.Sprintf("%d/%d left", left, total)))
+		}
+	}
+}
+
+func subscriptionFeatures(value any) []map[string]any {
+	switch features := value.(type) {
+	case []map[string]any:
+		return features
+	case []any:
+		result := make([]map[string]any, 0, len(features))
+		for _, item := range features {
+			if feature, ok := item.(map[string]any); ok {
+				result = append(result, feature)
 			}
 		}
+		return result
+	default:
+		return nil
 	}
 }
 

@@ -29,6 +29,16 @@ func (m Model) updateProviderSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.errorMsg = "Claude uses OAuth. Please run: llm-usage setup add claude"
 			return m, nil
 		}
+		if provider.ID == credentials.ProviderCodex {
+			m.selectedProvider = provider.ID
+			m.errorMsg = "Codex uses the local Codex CLI session; no setup is required"
+			return m, nil
+		}
+		if provider.ID == credentials.ProviderGrok {
+			m.selectedProvider = provider.ID
+			m.errorMsg = "Grok consumer quotas use the grok.json snapshot; no API key is required"
+			return m, nil
+		}
 		m.selectedProvider = provider.ID
 		return m.pushScreen(screenAddAccountName), nil
 	}

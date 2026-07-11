@@ -25,6 +25,60 @@ type OAuthCredentials struct {
 	RateLimitTier string   `json:"rateLimitTier"`
 }
 
+// LoadCodexCLI reads the authentication file written by the Codex CLI.
+func LoadCodexCLI() (*CodexCredentials, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home directory: %w", err)
+	}
+	base := os.Getenv("CODEX_HOME")
+	if base == "" {
+		base = filepath.Join(home, ".codex")
+	}
+	path := filepath.Join(base, "auth.json")
+	data, err := os.ReadFile(path) //nolint:gosec // conventional user-owned auth path
+	if err != nil {
+		return nil, fmt.Errorf("Codex credentials not found at %s: %w", path, err)
+	}
+	var creds CodexCredentials
+	if err := json.Unmarshal(data, &creds); err != nil {
+		return nil, fmt.Errorf("parse Codex credentials: %w", err)
+	}
+	if err := creds.Validate(); err != nil {
+		return nil, err
+	}
+	return &creds, nil
+}
+
+// GrokCLICredentials is the token material used by the local Grok CLI.
+type GrokCLICredentials struct {
+	AccessToken string
+}
+
+// LoadGrokCLI loads the authenticated local Grok CLI session.
+func LoadGrokCLI() (*GrokCLICredentials, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home directory: %w", err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".grok", "auth.json")) //nolint:gosec // conventional user-owned auth path
+	if err != nil {
+		return nil, fmt.Errorf("Grok CLI authentication not found: %w", err)
+	}
+	var sessions map[string]struct {
+		Key string `json:"key"`
+	}
+	if err := json.Unmarshal(data, &sessions); err != nil {
+		return nil, fmt.Errorf("parse Grok credentials: %w", err)
+	}
+	for _, session := range sessions {
+		if session.Key != "" {
+			return &GrokCLICredentials{AccessToken: session.Key}, nil
+		}
+	}
+	return nil, fmt.Errorf("no Grok CLI access token found")
+}
+
 // IsExpired checks if the access token has expired
 func (o *OAuthCredentials) IsExpired() bool {
 	expiresAt := time.UnixMilli(o.ExpiresAt)

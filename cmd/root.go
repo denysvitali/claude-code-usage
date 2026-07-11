@@ -2,13 +2,17 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/denysvitali/llm-usage/internal/app"
 	"github.com/denysvitali/llm-usage/internal/credentials"
-	"github.com/denysvitali/llm-usage/internal/provider"
 	"github.com/denysvitali/llm-usage/internal/usage"
 	"github.com/denysvitali/llm-usage/internal/version"
+	"github.com/denysvitali/llm-usage/provider"
+	registry "github.com/denysvitali/llm-usage/providers"
 	"github.com/spf13/cobra"
 )
 
@@ -20,13 +24,15 @@ var (
 	waybarOutput    bool
 	credentialsFile string
 	debugFlag       bool
+	timeoutFlag     time.Duration
 )
 
 // validProviders lists the provider IDs accepted by --provider, derived from
 // the central provider registry.
 var validProviders = func() []string {
-	ids := make([]string, 0, len(credentials.Providers))
-	for _, p := range credentials.Providers {
+	available := registry.All()
+	ids := make([]string, 0, len(available))
+	for _, p := range available {
 		ids = append(ids, p.ID)
 	}
 	return ids
@@ -35,7 +41,7 @@ var validProviders = func() []string {
 var rootCmd = &cobra.Command{
 	Use:   "llm-usage",
 	Short: "Display LLM API usage statistics",
-	Long:  `llm-usage displays API usage statistics across multiple LLM providers including Claude, Kimi, Z.AI, and MiniMax.`,
+	Long:  `llm-usage displays API usage statistics across Claude, Codex, Kimi, Z.AI, and MiniMax.`,
 	Example: `  # Show all configured providers
   llm-usage
 
@@ -63,17 +69,32 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "all", "Provider(s), comma-separated: claude, kimi, zai, minimax, or all")
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "all", "Provider(s), comma-separated: claude, codex, grok, kimi, zai, minimax, or all")
 	rootCmd.Flags().StringVarP(&accountFlag, "account", "a", "", "Account to use")
 	rootCmd.Flags().BoolVar(&allAccountsFlag, "all-accounts", false, "Aggregate usage across all accounts")
 	rootCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&waybarOutput, "waybar", false, "Output in waybar JSON format")
 	rootCmd.Flags().StringVar(&credentialsFile, "credentials-file", "", "Path to a combined credentials file (values may use $VAR or ${VAR} env references)")
 	rootCmd.Flags().BoolVar(&debugFlag, "debug", false, "Include raw provider API responses in the output")
+	rootCmd.Flags().DurationVar(&timeoutFlag, "timeout", 30*time.Second, "Maximum time to wait for provider responses")
 
 	_ = rootCmd.RegisterFlagCompletionFunc("provider", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return append([]string{"all"}, validProviders...), cobra.ShellCompDirectiveNoFileComp
 	})
+	rootCmd.AddCommand(&cobra.Command{Use: "completion [bash|zsh|fish|powershell]", Short: "Generate shell completion", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		switch args[0] {
+		case "bash":
+			return rootCmd.GenBashCompletion(cmd.OutOrStdout())
+		case "zsh":
+			return rootCmd.GenZshCompletion(cmd.OutOrStdout())
+		case "fish":
+			return rootCmd.GenFishCompletion(cmd.OutOrStdout(), true)
+		case "powershell":
+			return rootCmd.GenPowerShellCompletion(cmd.OutOrStdout())
+		default:
+			return fmt.Errorf("unsupported shell %q", args[0])
+		}
+	}})
 }
 
 func runUsage(_ *cobra.Command, _ []string) error {
@@ -84,19 +105,17 @@ func runUsage(_ *cobra.Command, _ []string) error {
 		credsMgr = credentials.NewManager()
 	}
 
-	// Determine which providers to query
-	providers, failures := usage.GetProviders(providerFlag, accountFlag, allAccountsFlag, debugFlag, credsMgr)
-	if len(providers) == 0 && len(failures) == 0 {
+	stats, err := (app.QueryService{Credentials: credsMgr}).Query(context.Background(), app.QueryOptions{
+		Providers: providerFlag, Account: accountFlag, AllAccounts: allAccountsFlag,
+		Debug: debugFlag, Timeout: timeoutFlag,
+	})
+	if err != nil {
 		if waybarOutput {
 			usage.OutputWaybarError("No providers configured")
 			return nil
 		}
-		return fmt.Errorf("no providers configured. Run 'llm-usage setup' to configure providers")
+		return fmt.Errorf("%w. Run 'llm-usage config init' to configure providers", err)
 	}
-
-	// Fetch usage from all providers concurrently
-	stats := usage.FetchAllUsage(providers)
-	stats.Providers = append(stats.Providers, failures...)
 
 	switch {
 	case waybarOutput:
@@ -110,7 +129,7 @@ func runUsage(_ *cobra.Command, _ []string) error {
 	// Signal failure to scripts when every provider errored (waybar output
 	// must always exit 0 so the bar module keeps rendering).
 	if !waybarOutput && allFailed(stats.Providers) {
-		os.Exit(1)
+		return fmt.Errorf("all selected providers failed")
 	}
 
 	return nil

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/denysvitali/llm-usage/internal/credentials"
-	"github.com/denysvitali/llm-usage/internal/provider"
+	"github.com/denysvitali/llm-usage/provider"
 )
 
 // Provider implements the provider.Provider interface for Z.AI
