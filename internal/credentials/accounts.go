@@ -8,6 +8,8 @@ const (
 	ProviderKimi    = "kimi"
 	ProviderZAi     = "zai"
 	ProviderMiniMax = "minimax"
+	ProviderCodex   = "codex"
+	ProviderGrok    = "grok"
 
 	// DefaultAccountName is the account name used when none is specified.
 	DefaultAccountName = "default"
@@ -25,6 +27,8 @@ var Providers = []ProviderInfo{
 	{ID: ProviderKimi, Name: "Kimi"},
 	{ID: ProviderMiniMax, Name: "MiniMax"},
 	{ID: ProviderZAi, Name: "Z.AI"},
+	{ID: ProviderCodex, Name: "Codex (OpenAI)"},
+	{ID: ProviderGrok, Name: "Grok (xAI)"},
 }
 
 // ProviderDisplayName returns the display name for a provider ID.
@@ -66,9 +70,90 @@ func NewCredentials(providerID string) (AccountCredentials, error) {
 		return &ZAiCredentials{}, nil
 	case ProviderMiniMax:
 		return &MiniMaxCredentials{}, nil
+	case ProviderCodex:
+		return &CodexCredentials{}, nil
+	case ProviderGrok:
+		return &GrokCredentials{}, nil
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", providerID)
 	}
+}
+
+// CodexCredentials represents credentials exported by the Codex CLI.
+type CodexCredentials struct {
+	Tokens *CodexTokens `json:"tokens,omitempty"`
+}
+
+type CodexTokens struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	AccountID    string `json:"account_id,omitempty"`
+}
+
+func (c *CodexCredentials) Validate() error {
+	if c.Tokens == nil || c.Tokens.AccessToken == "" {
+		return fmt.Errorf("no Codex access token found")
+	}
+	return nil
+}
+func (c *CodexCredentials) ID() string   { return ProviderCodex }
+func (c *CodexCredentials) Name() string { return ProviderDisplayName(ProviderCodex) }
+func (c *CodexCredentials) ListAccounts() []string {
+	if c.Tokens != nil {
+		return []string{DefaultAccountName}
+	}
+	return nil
+}
+func (c *CodexCredentials) RemoveAccount(string) error {
+	return fmt.Errorf("Codex CLI credentials have one account")
+}
+func (c *CodexCredentials) RenameAccount(string, string) error {
+	return fmt.Errorf("Codex CLI credentials have one account")
+}
+
+// GrokCredentials stores consumer-plan quota snapshots. xAI does not expose
+// a supported API for the weekly consumer quota, so these values are managed
+// explicitly by the user or an external updater.
+type GrokCredentials struct {
+	Accounts map[string]*GrokAccount `json:"accounts"`
+}
+type GrokAccount struct {
+	WeeklyUtilization float64 `json:"weeklyUtilization"`
+	ResetsAt          string  `json:"resetsAt"`
+	Plan              string  `json:"plan,omitempty"`
+}
+
+func (g *GrokCredentials) Validate() error {
+	if len(g.Accounts) == 0 {
+		return fmt.Errorf("no Grok accounts found")
+	}
+	for name, account := range g.Accounts {
+		if account == nil || account.ResetsAt == "" || account.WeeklyUtilization < 0 || account.WeeklyUtilization > 100 {
+			return fmt.Errorf("invalid Grok account %q", name)
+		}
+	}
+	return nil
+}
+func (g *GrokCredentials) ID() string   { return ProviderGrok }
+func (g *GrokCredentials) Name() string { return ProviderDisplayName(ProviderGrok) }
+func (g *GrokCredentials) ListAccounts() []string {
+	names := make([]string, 0, len(g.Accounts))
+	for name := range g.Accounts {
+		names = append(names, name)
+	}
+	return names
+}
+func (g *GrokCredentials) GetAccount(name string) *GrokAccount {
+	if name == "" {
+		name = DefaultAccountName
+	}
+	return g.Accounts[name]
+}
+func (g *GrokCredentials) RemoveAccount(name string) error {
+	return removeFromAccounts(g.Accounts, name)
+}
+func (g *GrokCredentials) RenameAccount(oldName, newName string) error {
+	return renameInAccounts(g.Accounts, oldName, newName)
 }
 
 // LoadAccountCredentials loads a provider's credentials behind the generic

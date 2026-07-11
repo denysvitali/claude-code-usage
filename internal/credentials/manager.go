@@ -215,6 +215,22 @@ func (m *Manager) LoadMiniMax() (*MiniMaxCredentials, error) {
 	return &creds, nil
 }
 
+func (m *Manager) LoadCodex() (*CodexCredentials, error) {
+	var creds CodexCredentials
+	if err := m.LoadProvider(ProviderCodex, &creds); err != nil {
+		return nil, err
+	}
+	return &creds, nil
+}
+
+func (m *Manager) LoadGrok() (*GrokCredentials, error) {
+	var creds GrokCredentials
+	if err := m.LoadProvider(ProviderGrok, &creds); err != nil {
+		return nil, err
+	}
+	return &creds, nil
+}
+
 // ClaudeCredentials represents Claude OAuth credentials with multi-account support
 type ClaudeCredentials struct {
 	ClaudeAiOauth *OAuthCredentials         `json:"claudeAiOauth,omitempty"` // Legacy single-account format

@@ -1,6 +1,6 @@
 # llm-usage
 
-A CLI tool to display your LLM API usage statistics across multiple providers (Claude, Kimi, MiniMax, Z.AI).
+A CLI tool to display your LLM API usage statistics across multiple providers (Claude, Codex, Grok, Kimi, MiniMax, Z.AI).
 
 ## Features
 
@@ -10,6 +10,7 @@ A CLI tool to display your LLM API usage statistics across multiple providers (C
 - Web UI with JSON API (`llm-usage serve`)
 - Interactive setup wizard and automatic Claude CLI credential migration
 - Automatic Claude OAuth token refresh
+- Automatic Codex CLI authentication discovery from `~/.codex/auth.json`
 - Visual progress bars showing usage utilization and reset times
 
 ## Supported Providers
@@ -17,6 +18,8 @@ A CLI tool to display your LLM API usage statistics across multiple providers (C
 | Provider | Status | Auth Type |
 |----------|--------|-----------|
 | Claude   | ✅ Implemented | OAuth (migrated from the Claude CLI, or manual tokens) |
+| Codex    | ✅ Implemented | OAuth (read from the Codex CLI auth file) |
+| Grok     | ✅ Implemented | Local Grok CLI OAuth session |
 | Kimi     | ✅ Implemented | API key |
 | MiniMax  | ✅ Implemented | Cookie + Group ID |
 | Z.AI     | 🔜 Planned | API key (credentials can be stored, usage fetching pending) |
@@ -68,6 +71,8 @@ llm-usage
 
 # Show one or more specific providers
 llm-usage --provider=claude
+llm-usage --provider=codex
+llm-usage --provider=grok
 llm-usage --provider=claude,kimi
 
 # Show a specific account
@@ -88,6 +93,24 @@ llm-usage --version
 
 The command exits non-zero if every provider fails (except with `--waybar`, which always exits 0 so the bar module keeps rendering).
 
+### Go library
+
+The reusable provider API is separate from CLI configuration and credential
+discovery. Public packages are available for Claude, Codex, Grok, Kimi,
+MiniMax, and Z.AI under `github.com/denysvitali/llm-usage/providers/<name>`.
+For example, a Go application can query Grok with its own token source and
+HTTP client:
+
+```go
+client, err := grok.NewClient(grok.ClientOptions{AccessToken: token})
+if err != nil {
+    return err
+}
+usage, err := client.GetUsage(ctx)
+```
+
+Import `github.com/denysvitali/llm-usage/provider` for normalized usage types.
+
 ### Web UI
 
 ```bash
@@ -97,6 +120,9 @@ llm-usage serve --host 0.0.0.0 --port 9090
 ```
 
 ### Configuration
+
+Grok is discovered from `~/.grok/auth.json` and uses the same billing endpoint
+as the Grok CLI dashboard. No separate setup or quota snapshot is required.
 
 Credentials are stored following the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html), in `$XDG_CONFIG_HOME/llm-usage/` (defaults to `~/.config/llm-usage/`):
 

@@ -9,7 +9,7 @@ import (
 
 	"github.com/denysvitali/llm-usage/internal/cache"
 	"github.com/denysvitali/llm-usage/internal/credentials"
-	"github.com/denysvitali/llm-usage/internal/provider"
+	"github.com/denysvitali/llm-usage/provider"
 )
 
 const (

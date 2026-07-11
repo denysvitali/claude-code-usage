@@ -15,7 +15,6 @@ import (
 const (
 	baseURL       = "https://api.anthropic.com"
 	usageEndpoint = "/api/oauth/usage"
-	userAgent     = "llm-usage/1.0.0"
 	betaHeader    = "oauth-2025-04-20"
 )
 

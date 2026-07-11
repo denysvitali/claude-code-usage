@@ -13,6 +13,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/denysvitali/llm-usage/internal/app"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/usage"
 )
@@ -134,11 +135,16 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	providerFilter := r.URL.Query().Get("provider")
 	accountFilter := r.URL.Query().Get("account")
 
-	// Always fetch fresh providers on each request
-	providers, failures := usage.GetProviders(providerFilter, accountFilter, accountFilter == "", false, s.credsMgr)
-
-	stats := usage.FetchAllUsage(providers)
-	stats.Providers = append(stats.Providers, failures...)
+	stats, err := (app.QueryService{Credentials: s.credsMgr}).Query(r.Context(), app.QueryOptions{
+		Providers:   providerFilter,
+		Account:     accountFilter,
+		AllAccounts: accountFilter == "",
+		Timeout:     30 * time.Second,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

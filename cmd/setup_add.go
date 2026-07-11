@@ -10,7 +10,7 @@ var setupAddAccountName string
 var setupAddCmd = &cobra.Command{
 	Use:   "add <provider>",
 	Short: "Add an account for a provider",
-	Long:  `Add a new account for a provider (claude, kimi, zai, or minimax).`,
+	Long:  `Add a new account for a provider (claude, codex, kimi, zai, or minimax).`,
 	Args:  cobra.ExactArgs(1),
 	RunE:  runSetupAdd,
 }

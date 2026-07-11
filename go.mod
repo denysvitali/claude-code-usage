@@ -23,7 +23,10 @@ require (
 	golang.org/x/text v0.28.0 // indirect
 )
 
-require github.com/adrg/xdg v0.5.3
+require (
+	github.com/adrg/xdg v0.5.3
+	gopkg.in/yaml.v3 v3.0.1
+)
 
 require (
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect
