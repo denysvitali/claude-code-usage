@@ -4,8 +4,11 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/denysvitali/llm-usage/internal/cache"
+	"github.com/denysvitali/llm-usage/internal/config"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/usage"
 	"github.com/denysvitali/llm-usage/provider"
@@ -13,11 +16,14 @@ import (
 
 // QueryOptions controls one usage query.
 type QueryOptions struct {
-	Providers   string
-	Account     string
-	AllAccounts bool
-	Debug       bool
-	Timeout     time.Duration
+	Providers    string
+	Account      string
+	AllAccounts  bool
+	Debug        bool
+	Timeout      time.Duration
+	CacheTTL     time.Duration
+	StaleIfError bool
+	Config       *config.Config
 }
 
 // QueryService is the shared usage orchestration service.
@@ -30,7 +36,23 @@ func (s QueryService) Query(ctx context.Context, opts QueryOptions) (*provider.U
 	if s.Credentials == nil {
 		return nil, fmt.Errorf("credentials manager is required")
 	}
-	providers, failures := usage.GetProviders(opts.Providers, opts.Account, opts.AllAccounts, opts.Debug, s.Credentials)
+	providerSelection := opts.Providers
+	if (providerSelection == "" || providerSelection == "all") && opts.Config != nil && len(opts.Config.Providers) > 0 {
+		ids := make([]string, 0, len(opts.Config.Providers))
+		for _, configured := range opts.Config.Providers {
+			ids = append(ids, configured.ID)
+		}
+		providerSelection = strings.Join(ids, ",")
+	}
+	configuredAccounts := make(map[string][]string)
+	if opts.Config != nil {
+		for _, configured := range opts.Config.Providers {
+			for _, account := range configured.Accounts {
+				configuredAccounts[configured.ID] = append(configuredAccounts[configured.ID], account.Name)
+			}
+		}
+	}
+	providers, failures := usage.GetProviders(providerSelection, opts.Account, opts.AllAccounts, opts.Debug, configuredAccounts, s.Credentials)
 	if len(providers) == 0 && len(failures) == 0 {
 		return nil, fmt.Errorf("no providers configured")
 	}
@@ -43,7 +65,11 @@ func (s QueryService) Query(ctx context.Context, opts QueryOptions) (*provider.U
 
 	result := make(chan *provider.UsageStats, 1)
 	go func() {
-		stats := usage.FetchAllUsage(providers)
+		var cacheManager *cache.Manager
+		if opts.CacheTTL > 0 {
+			cacheManager = cache.NewManager()
+		}
+		stats := usage.FetchAllUsage(queryCtx, providers, usage.CacheOptions{Manager: cacheManager, TTL: opts.CacheTTL, StaleIfError: opts.StaleIfError})
 		stats.Providers = append(stats.Providers, failures...)
 		result <- stats
 	}()

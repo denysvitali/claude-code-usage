@@ -18,10 +18,18 @@ var watchCmd = &cobra.Command{
 	RunE: func(_ *cobra.Command, _ []string) error {
 		mgr := credentials.NewManager()
 		service := app.QueryService{Credentials: mgr}
+		cfg, err := loadRuntimeConfig()
+		if err != nil {
+			return fmt.Errorf("load configuration: %w", err)
+		}
+		opts, err := newQueryOptions(cfg)
+		if err != nil {
+			return err
+		}
 		ticker := time.NewTicker(watchInterval)
 		defer ticker.Stop()
 		for {
-			stats, err := service.Query(context.Background(), app.QueryOptions{Providers: providerFlag, Account: accountFlag, AllAccounts: allAccountsFlag, Debug: debugFlag, Timeout: timeoutFlag})
+			stats, err := service.Query(context.Background(), opts)
 			if err != nil {
 				return err
 			}

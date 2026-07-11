@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/denysvitali/llm-usage/internal/app"
+	"github.com/denysvitali/llm-usage/internal/config"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/usage"
 	"github.com/denysvitali/llm-usage/internal/version"
@@ -25,6 +26,9 @@ var (
 	credentialsFile string
 	debugFlag       bool
 	timeoutFlag     time.Duration
+	cacheTTLFlag    time.Duration
+	staleIfError    bool
+	configFileFlag  string
 )
 
 // validProviders lists the provider IDs accepted by --provider, derived from
@@ -41,7 +45,7 @@ var validProviders = func() []string {
 var rootCmd = &cobra.Command{
 	Use:   "llm-usage",
 	Short: "Display LLM API usage statistics",
-	Long:  `llm-usage displays API usage statistics across Claude, Codex, Kimi, Z.AI, and MiniMax.`,
+	Long:  `llm-usage displays API usage statistics across Claude, Codex, Grok, Kimi, and MiniMax.`,
 	Example: `  # Show all configured providers
   llm-usage
 
@@ -69,7 +73,7 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "all", "Provider(s), comma-separated: claude, codex, grok, kimi, zai, minimax, or all")
+	rootCmd.Flags().StringVarP(&providerFlag, "provider", "p", "all", "Provider(s), comma-separated: claude, codex, grok, kimi, minimax, or all")
 	rootCmd.Flags().StringVarP(&accountFlag, "account", "a", "", "Account to use")
 	rootCmd.Flags().BoolVar(&allAccountsFlag, "all-accounts", false, "Aggregate usage across all accounts")
 	rootCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
@@ -77,6 +81,9 @@ func init() {
 	rootCmd.Flags().StringVar(&credentialsFile, "credentials-file", "", "Path to a combined credentials file (values may use $VAR or ${VAR} env references)")
 	rootCmd.Flags().BoolVar(&debugFlag, "debug", false, "Include raw provider API responses in the output")
 	rootCmd.Flags().DurationVar(&timeoutFlag, "timeout", 30*time.Second, "Maximum time to wait for provider responses")
+	rootCmd.Flags().DurationVar(&cacheTTLFlag, "cache-ttl", 0, "Cache successful usage responses for this duration (disabled by default)")
+	rootCmd.Flags().BoolVar(&staleIfError, "stale-if-error", false, "Use expired cache data when a provider request fails")
+	rootCmd.Flags().StringVar(&configFileFlag, "config", "", "Configuration file path (default: XDG config path)")
 
 	_ = rootCmd.RegisterFlagCompletionFunc("provider", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return append([]string{"all"}, validProviders...), cobra.ShellCompDirectiveNoFileComp
@@ -105,10 +112,15 @@ func runUsage(_ *cobra.Command, _ []string) error {
 		credsMgr = credentials.NewManager()
 	}
 
-	stats, err := (app.QueryService{Credentials: credsMgr}).Query(context.Background(), app.QueryOptions{
-		Providers: providerFlag, Account: accountFlag, AllAccounts: allAccountsFlag,
-		Debug: debugFlag, Timeout: timeoutFlag,
-	})
+	cfg, err := loadRuntimeConfig()
+	if err != nil {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+	opts, err := newQueryOptions(cfg)
+	if err != nil {
+		return err
+	}
+	stats, err := (app.QueryService{Credentials: credsMgr}).Query(context.Background(), opts)
 	if err != nil {
 		if waybarOutput {
 			usage.OutputWaybarError("No providers configured")
@@ -117,10 +129,17 @@ func runUsage(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("%w. Run 'llm-usage config init' to configure providers", err)
 	}
 
-	switch {
-	case waybarOutput:
+	format := cfg.Defaults.Output.Format
+	if waybarOutput {
+		format = "waybar"
+	} else if jsonOutput {
+		format = "json"
+	}
+	isWaybar := format == "waybar"
+	switch format {
+	case "waybar":
 		usage.OutputWaybar(stats)
-	case jsonOutput:
+	case "json":
 		usage.OutputJSON(stats)
 	default:
 		usage.OutputPretty(stats)
@@ -128,11 +147,35 @@ func runUsage(_ *cobra.Command, _ []string) error {
 
 	// Signal failure to scripts when every provider errored (waybar output
 	// must always exit 0 so the bar module keeps rendering).
-	if !waybarOutput && allFailed(stats.Providers) {
+	if !isWaybar && allFailed(stats.Providers) {
 		return fmt.Errorf("all selected providers failed")
 	}
 
 	return nil
+}
+
+func loadRuntimeConfig() (*config.Config, error) {
+	path := configFileFlag
+	if path == "" {
+		path = config.DefaultPath()
+	}
+	return config.LoadOptional(path)
+}
+
+func newQueryOptions(cfg *config.Config) (app.QueryOptions, error) {
+	ttl := cacheTTLFlag
+	if ttl == 0 && cfg != nil && cfg.Defaults.Cache.TTL != "" {
+		parsed, err := time.ParseDuration(cfg.Defaults.Cache.TTL)
+		if err != nil {
+			return app.QueryOptions{}, fmt.Errorf("parse cache TTL: %w", err)
+		}
+		ttl = parsed
+	}
+	stale := staleIfError || (cfg != nil && cfg.Defaults.Cache.StaleIfError)
+	return app.QueryOptions{
+		Providers: providerFlag, Account: accountFlag, AllAccounts: allAccountsFlag,
+		Debug: debugFlag, Timeout: timeoutFlag, CacheTTL: ttl, StaleIfError: stale, Config: cfg,
+	}, nil
 }
 
 // allFailed reports whether every provider entry carries an error.

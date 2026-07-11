@@ -29,6 +29,20 @@ func Load(path string, cfg *Config) error {
 	return nil
 }
 
+func LoadOptional(path string) (*Config, error) {
+	cfg := new(Config)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("stat config: %w", err)
+	}
+	if err := Load(path, cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
 func Save(path string, cfg Config) error {
 	if err := Validate(&cfg); err != nil {
 		return err

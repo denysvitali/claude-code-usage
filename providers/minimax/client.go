@@ -36,7 +36,7 @@ func NewClient(cookie, groupID string) *Client {
 }
 
 // GetUsage fetches the current usage from the coding_plan/remains endpoint
-func (c *Client) GetUsage() (*CodingPlanResponse, error) {
+func (c *Client) GetUsage(ctx context.Context) (*CodingPlanResponse, error) {
 	// Build URL with GroupId query parameter
 	reqURL, err := url.Parse(baseURL + codingPlanEndpoint)
 	if err != nil {
@@ -47,7 +47,7 @@ func (c *Client) GetUsage() (*CodingPlanResponse, error) {
 	query.Add("GroupId", c.groupID)
 	reqURL.RawQuery = query.Encode()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, reqURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -80,7 +80,7 @@ func (c *Client) GetUsage() (*CodingPlanResponse, error) {
 }
 
 // GetSubscription fetches the subscription details from the subscription endpoint
-func (c *Client) GetSubscription() (*SubscriptionResponse, error) {
+func (c *Client) GetSubscription(ctx context.Context) (*SubscriptionResponse, error) {
 	// Build URL with query parameters
 	reqURL, err := url.Parse(baseURL + subscriptionEndpoint)
 	if err != nil {
@@ -94,7 +94,7 @@ func (c *Client) GetSubscription() (*SubscriptionResponse, error) {
 	query.Add("resource_package_type", "7")
 	reqURL.RawQuery = query.Encode()
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, reqURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

@@ -2,8 +2,11 @@
 package usage
 
 import (
+	"context"
 	"sync"
+	"time"
 
+	"github.com/denysvitali/llm-usage/internal/cache"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
 	registry "github.com/denysvitali/llm-usage/providers"
@@ -26,15 +29,22 @@ func ProviderName(id string) string      { return registry.Name(id) }
 func ProviderShortName(id string) string { return registry.ShortName(id) }
 
 // GetProviders resolves registered provider definitions into ready instances.
-func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, configuredAccounts map[string][]string, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
 	return registry.Resolve(registry.Request{
 		Provider: providerFlag, Account: accountFlag, AllAccounts: allAccounts,
 		Debug: debug, Explicit: providerFlag != "all" && providerFlag != "",
+		ConfiguredAccounts: configuredAccounts,
 	}, credsMgr)
 }
 
 // FetchAllUsage fetches usage from all providers concurrently.
-func FetchAllUsage(providers []ProviderInstance) *provider.UsageStats {
+type CacheOptions struct {
+	Manager      *cache.Manager
+	TTL          time.Duration
+	StaleIfError bool
+}
+
+func FetchAllUsage(ctx context.Context, providers []ProviderInstance, cacheOptions CacheOptions) *provider.UsageStats {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
@@ -43,10 +53,26 @@ func FetchAllUsage(providers []ProviderInstance) *provider.UsageStats {
 		wg.Add(1)
 		go func(index int, current ProviderInstance) {
 			defer wg.Done()
-			result, err := current.GetUsage()
+			key := cache.HashKey(current.ID(), current.AccountName)
+			var cached provider.Usage
+			if cacheOptions.Manager != nil && cacheOptions.TTL > 0 {
+				if found, fresh, age, cacheErr := cacheOptions.Manager.Lookup(key, &cached); cacheErr == nil && found && fresh {
+					markCached(&cached, age, false)
+					stats.Providers[index] = cached
+					return
+				}
+			}
+			result, err := current.GetUsage(ctx)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				if cacheOptions.Manager != nil && cacheOptions.TTL > 0 && cacheOptions.StaleIfError {
+					if found, fresh, age, cacheErr := cacheOptions.Manager.Lookup(key, &cached); cacheErr == nil && found && !fresh {
+						markCached(&cached, age, true)
+						stats.Providers[index] = cached
+						return
+					}
+				}
 				stats.Providers[index] = registry.Failure(current.ID(), current.AccountName, err)
 				return
 			}
@@ -55,6 +81,9 @@ func FetchAllUsage(providers []ProviderInstance) *provider.UsageStats {
 					result.Extra = make(map[string]any)
 				}
 				result.Extra["account"] = current.AccountName
+			}
+			if cacheOptions.Manager != nil && cacheOptions.TTL > 0 {
+				_ = cacheOptions.Manager.Set(key, *result, cacheOptions.TTL)
 			}
 			stats.Providers[index] = *result
 		}(i, instance)
@@ -69,4 +98,11 @@ func FetchAllUsage(providers []ProviderInstance) *provider.UsageStats {
 	}
 	stats.Providers = filtered
 	return stats
+}
+
+func markCached(report *provider.Usage, age time.Duration, stale bool) {
+	if report.Extra == nil {
+		report.Extra = make(map[string]any)
+	}
+	report.Extra["cache"] = map[string]any{"age_seconds": int(age.Seconds()), "stale": stale}
 }

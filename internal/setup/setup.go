@@ -3,6 +3,7 @@ package setup
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -18,7 +19,6 @@ import (
 const (
 	providerClaude  = credentials.ProviderClaude
 	providerKimi    = credentials.ProviderKimi
-	providerZAi     = credentials.ProviderZAi
 	providerMiniMax = credentials.ProviderMiniMax
 
 	defaultAccountName = credentials.DefaultAccountName
@@ -36,7 +36,6 @@ func Wizard(mgr *credentials.Manager) error {
 	}{
 		{providerClaude, providerName(providerClaude)},
 		{providerKimi, providerName(providerKimi)},
-		{providerZAi, providerName(providerZAi) + " (usage fetching not yet implemented)"},
 		{providerMiniMax, providerName(providerMiniMax)},
 	}
 
@@ -61,14 +60,12 @@ func AddAccount(mgr *credentials.Manager, providerID, accountName string) error 
 		return addClaudeAccount(mgr, accountName)
 	case providerKimi:
 		return addAPIKeyAccount(mgr, providerKimi, accountName)
-	case providerZAi:
-		return addAPIKeyAccount(mgr, providerZAi, accountName)
 	case providerMiniMax:
 		return addMiniMaxAccount(mgr, accountName)
 	case credentials.ProviderCodex:
 		return addCodexAccount()
 	case credentials.ProviderGrok:
-		return fmt.Errorf("Grok consumer quota is configured through grok.json; see 'llm-usage --help'")
+		return fmt.Errorf("authenticate with the Grok CLI; llm-usage reads ~/.grok/auth.json")
 	default:
 		return fmt.Errorf("unknown provider: %s", providerID)
 	}
@@ -215,7 +212,7 @@ func addMiniMaxAccount(mgr *credentials.Manager, accountName string) error {
 // reports the result, so typos are caught at setup time instead of first use.
 func verifyAccount(p provider.Provider) {
 	fmt.Print("Verifying credentials... ")
-	if _, err := p.GetUsage(); err != nil {
+	if _, err := p.GetUsage(context.Background()); err != nil {
 		fmt.Println("failed!")
 		fmt.Fprintf(os.Stderr, "Warning: test API call failed: %v\n", err)
 		fmt.Fprintln(os.Stderr, "The credentials were saved anyway - double-check them if usage fetching fails.")
@@ -274,22 +271,6 @@ func SaveAPIKeyAccount(mgr *credentials.Manager, providerID, accountName, apiKey
 		}
 		creds.Accounts[accountName] = &credentials.KimiAccount{APIKey: apiKey}
 		return mgr.SaveProvider(providerKimi, creds)
-	case providerZAi:
-		var creds credentials.ZAiCredentials
-		if mgr.ProviderExists(providerZAi) {
-			if err := mgr.LoadProvider(providerZAi, &creds); err != nil {
-				creds = credentials.ZAiCredentials{}
-			}
-		}
-		if creds.Accounts == nil {
-			creds.Accounts = make(map[string]*credentials.ZAiAccount)
-			if creds.APIKey != "" {
-				creds.Accounts[defaultAccountName] = &credentials.ZAiAccount{APIKey: creds.APIKey}
-				creds.APIKey = ""
-			}
-		}
-		creds.Accounts[accountName] = &credentials.ZAiAccount{APIKey: apiKey}
-		return mgr.SaveProvider(providerZAi, creds)
 	default:
 		return fmt.Errorf("unsupported provider: %s", providerID)
 	}

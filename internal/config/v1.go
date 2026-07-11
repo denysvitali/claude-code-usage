@@ -17,6 +17,12 @@ type Config struct {
 type Defaults struct {
 	Output OutputDefaults `yaml:"output,omitempty"`
 	Server ServerDefaults `yaml:"server,omitempty"`
+	Cache  CacheDefaults  `yaml:"cache,omitempty"`
+}
+
+type CacheDefaults struct {
+	TTL          string `yaml:"ttl,omitempty"`
+	StaleIfError bool   `yaml:"stale_if_error,omitempty"`
 }
 
 // OutputDefaults holds default output settings.

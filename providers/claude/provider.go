@@ -1,10 +1,10 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 
-	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
 )
 
@@ -25,7 +25,7 @@ func NewProvider(accessToken string, debug bool) *Provider {
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return credentials.ProviderDisplayName(credentials.ProviderClaude)
+	return "Claude (Anthropic)"
 }
 
 // ShortName returns the provider's compact label
@@ -39,8 +39,8 @@ func (p *Provider) ID() string {
 }
 
 // GetUsage fetches current usage statistics from Claude
-func (p *Provider) GetUsage() (*provider.Usage, error) {
-	usage, raw, err := p.client.GetUsage()
+func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
+	usage, raw, err := p.client.GetUsage(ctx)
 	if err != nil {
 		return nil, err
 	}

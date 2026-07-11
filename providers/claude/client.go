@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/denysvitali/llm-usage/internal/version"
 )
 
 const (
@@ -37,10 +35,7 @@ func NewClient(accessToken string) *Client {
 // GetUsage fetches the current usage from the OAuth usage endpoint.
 // It also returns the raw response body, which is useful for debugging
 // fields the API returns that aren't yet mapped to UsageResponse.
-func (c *Client) GetUsage() (*UsageResponse, []byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+func (c *Client) GetUsage(ctx context.Context) (*UsageResponse, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+usageEndpoint, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
@@ -49,7 +44,7 @@ func (c *Client) GetUsage() (*UsageResponse, []byte, error) {
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "llm-usage/"+version.Version)
+	req.Header.Set("User-Agent", "llm-usage")
 	req.Header.Set("anthropic-beta", betaHeader)
 
 	resp, err := c.httpClient.Do(req)

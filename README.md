@@ -6,7 +6,7 @@ small integrations such as Waybar, scripts, and a local HTTP server.
 
 ## What it does
 
-- Queries Claude, Codex, Grok, Kimi, MiniMax, and Z.AI through one interface.
+- Queries Claude, Codex, Grok, Kimi, and MiniMax through one interface.
 - Discovers existing Codex and Grok CLI sessions without asking you to copy
   tokens into another configuration file.
 - Supports named accounts for providers that use llm-usage-managed
@@ -25,7 +25,6 @@ small integrations such as Waybar, scripts, and a local HTTP server.
 | `grok` | Grok (xAI) | Grok CLI session in `~/.grok/auth.json` | Implemented |
 | `kimi` | Kimi | Managed API key | Implemented |
 | `minimax` | MiniMax | Managed cookie and group ID | Implemented |
-| `zai` | Z.AI | Managed API key | Credential storage only |
 
 Codex and Grok are automatically included when their local CLI sessions are
 available. They do not need a `setup add` step. Claude credentials can be
@@ -96,10 +95,11 @@ llm-usage --provider=codex --debug
 
 # Bound slow provider requests
 llm-usage --timeout=15s
+llm-usage --cache-ttl=5m --stale-if-error
 ```
 
 The provider selector accepts `all` or these IDs: `claude`, `codex`, `grok`,
-`kimi`, `minimax`, and `zai`.
+`kimi`, and `minimax`.
 
 ### Configure managed credentials
 
@@ -131,6 +131,7 @@ Codex and Grok should be authenticated with their own CLIs instead.
 llm-usage config init
 llm-usage config path
 llm-usage config validate
+llm-usage config explain
 llm-usage config --file ./llm-usage.yaml validate
 llm-usage doctor
 ```
@@ -146,6 +147,11 @@ llm-usage --credentials-file ./credentials.json --provider=kimi
 
 Values in that file may reference environment variables with `$VAR` or
 `${VAR}`. Do not commit the file.
+
+The root query command uses this configuration when it exists. Explicit CLI
+flags override configured values. If no configuration exists, provider
+selection falls back to managed credentials and locally authenticated CLI
+sessions.
 
 ### Watch and serve
 
@@ -205,6 +211,10 @@ and status. The Waybar output contains `text`, `tooltip`, and a CSS class.
 Codex displays its 5-hour and 7-day windows in order. Grok displays its
 weekly window. Use `llm-usage --waybar` without `--provider` for one combined
 module instead.
+
+Caching is disabled by default. `--cache-ttl` enables a bounded local cache;
+`--stale-if-error` permits expired values only when a live provider request
+fails.
 
 ## JSON output
 

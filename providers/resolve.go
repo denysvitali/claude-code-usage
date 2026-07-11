@@ -11,7 +11,6 @@ import (
 	"github.com/denysvitali/llm-usage/providers/codex"
 	"github.com/denysvitali/llm-usage/providers/kimi"
 	"github.com/denysvitali/llm-usage/providers/minimax"
-	"github.com/denysvitali/llm-usage/providers/zai"
 )
 
 // Instance is a provider ready for usage retrieval.
@@ -24,6 +23,7 @@ type Instance struct {
 type Request struct {
 	Provider, Account            string
 	AllAccounts, Debug, Explicit bool
+	ConfiguredAccounts           map[string][]string
 }
 
 // Definition is a compiled provider integration. New providers add one
@@ -37,9 +37,8 @@ var definitions = []Definition{
 	{Capability: Capability{ID: credentials.ProviderClaude, Name: "Claude (Anthropic)", Auth: "OAuth", Implemented: true}, Load: loadClaude},
 	{Capability: Capability{ID: credentials.ProviderKimi, Name: "Kimi", Auth: "API key", Implemented: true}, Load: loadKimi},
 	{Capability: Capability{ID: credentials.ProviderMiniMax, Name: "MiniMax", Auth: "Cookie + group ID", Implemented: true}, Load: loadMiniMax},
-	{Capability: Capability{ID: credentials.ProviderZAi, Name: "Z.AI", Auth: "API key", Implemented: false}, Load: loadZAi},
 	{Capability: Capability{ID: credentials.ProviderCodex, Name: "Codex (OpenAI)", Auth: "Codex CLI OAuth", Implemented: true}, Load: loadCodex},
-	{Capability: Capability{ID: credentials.ProviderGrok, Name: "Grok (xAI)", Auth: "Quota snapshot", Implemented: true}, Load: loadGrok},
+	{Capability: Capability{ID: credentials.ProviderGrok, Name: "Grok (xAI)", Auth: "Grok CLI OAuth", Implemented: true}, Load: loadGrok},
 }
 
 func Resolve(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
@@ -254,21 +253,12 @@ func loadMiniMax(request Request, manager *credentials.Manager) ([]Instance, []b
 		return nil
 	})
 }
-func loadZAi(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
-	return loadAccounts(credentials.ProviderZAi, request, manager.LoadZAi, func(c *credentials.ZAiCredentials) []string { return c.ListAccounts() }, func(c *credentials.ZAiCredentials, name string) base.Provider {
-		if a := c.GetAccount(name); a != nil {
-			return zai.NewProvider(a.APIKey)
-		}
-		return nil
-	})
-}
-
 func loadAccounts[C any](id string, request Request, load func() (C, error), list func(C) []string, build func(C, string) base.Provider) ([]Instance, []base.Usage) {
 	creds, err := load()
 	if err != nil {
 		return nil, []base.Usage{Failure(id, "", err)}
 	}
-	if request.AllAccounts || request.Account == "" {
+	if request.AllAccounts || (request.Account == "" && len(request.ConfiguredAccounts[id]) == 0) {
 		var instances []Instance
 		for _, account := range list(creds) {
 			if p := build(creds, account); p != nil {
@@ -276,6 +266,18 @@ func loadAccounts[C any](id string, request Request, load func() (C, error), lis
 			}
 		}
 		return instances, nil
+	}
+	if request.Account == "" && len(request.ConfiguredAccounts[id]) > 0 {
+		var instances []Instance
+		for _, account := range request.ConfiguredAccounts[id] {
+			if p := build(creds, account); p != nil {
+				instances = append(instances, Instance{Provider: p, AccountName: account})
+			}
+		}
+		if len(instances) > 0 {
+			return instances, nil
+		}
+		return nil, []base.Usage{Failure(id, "", fmt.Errorf("configured accounts are not available"))}
 	}
 	p := build(creds, request.Account)
 	if p == nil {

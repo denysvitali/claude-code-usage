@@ -26,7 +26,6 @@ var Providers = []ProviderInfo{
 	{ID: ProviderClaude, Name: "Claude (Anthropic)"},
 	{ID: ProviderKimi, Name: "Kimi"},
 	{ID: ProviderMiniMax, Name: "MiniMax"},
-	{ID: ProviderZAi, Name: "Z.AI"},
 	{ID: ProviderCodex, Name: "Codex (OpenAI)"},
 	{ID: ProviderGrok, Name: "Grok (xAI)"},
 }

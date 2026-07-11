@@ -2,37 +2,30 @@
 package kimi
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/denysvitali/llm-usage/internal/cache"
-	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
-)
-
-const (
-	subscriptionCacheTTL = 30 * time.Minute
 )
 
 // Provider implements the provider.Provider interface for Kimi
 type Provider struct {
 	client *Client
-	cache  *cache.Manager
 }
 
 // NewProvider creates a new Kimi provider with the given API key
 func NewProvider(apiKey string) *Provider {
 	return &Provider{
 		client: NewClient(apiKey),
-		cache:  cache.NewManager(),
 	}
 }
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return credentials.ProviderDisplayName(credentials.ProviderKimi)
+	return "Kimi"
 }
 
 // ShortName returns the provider's compact label
@@ -46,8 +39,8 @@ func (p *Provider) ID() string {
 }
 
 // GetUsage fetches current usage statistics from Kimi
-func (p *Provider) GetUsage() (*provider.Usage, error) {
-	resp, err := p.client.GetUsage()
+func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
+	resp, err := p.client.GetUsage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +67,7 @@ func (p *Provider) GetUsage() (*provider.Usage, error) {
 	}
 
 	// Fetch subscription info (with caching)
-	if sub := p.getSubscription(); sub != nil {
+	if sub, err := p.client.GetSubscription(ctx); err == nil {
 		if usage.Extra == nil {
 			usage.Extra = make(map[string]any)
 		}
@@ -176,28 +169,6 @@ func (p *Provider) formatDurationLabel(duration int, timeUnit string) string {
 	}
 
 	return fmt.Sprintf("%d-%s Rate Limit", duration, unit)
-}
-
-// getSubscription fetches subscription info with caching
-func (p *Provider) getSubscription() *SubscriptionResponse {
-	cacheKey := cache.HashKey("kimi_subscription", p.client.APIKey())
-
-	// Try to get from cache
-	var cached SubscriptionResponse
-	if found, err := p.cache.Get(cacheKey, &cached); err == nil && found {
-		return &cached
-	}
-
-	// Fetch from API
-	sub, err := p.client.GetSubscription()
-	if err != nil {
-		return nil
-	}
-
-	// Cache the result
-	_ = p.cache.Set(cacheKey, sub, subscriptionCacheTTL)
-
-	return sub
 }
 
 // formatSubscriptionExtra formats subscription data for the Extra map

@@ -247,7 +247,7 @@ func (m Model) secretLabel() string {
 func (m Model) saveAccount() (tea.Model, tea.Cmd) {
 	var err error
 	switch m.selectedProvider {
-	case credentials.ProviderKimi, credentials.ProviderZAi:
+	case credentials.ProviderKimi:
 		err = setup.SaveAPIKeyAccount(m.credsMgr, m.selectedProvider, m.accountName, m.inputText)
 	case credentials.ProviderMiniMax:
 		err = setup.SaveMiniMaxAccount(m.credsMgr, m.accountName, m.inputText, m.groupID)

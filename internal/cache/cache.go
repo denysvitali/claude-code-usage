@@ -25,6 +25,27 @@ type Entry struct {
 	ExpiresAt time.Time       `json:"expires_at"`
 }
 
+// Lookup returns a cached value even when it has expired. The caller can use
+// fresh to decide whether the value is suitable for a normal response.
+func (m *Manager) Lookup(key string, target any) (found, fresh bool, age time.Duration, err error) {
+	path := m.keyPath(key)
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, false, 0, nil
+		}
+		return false, false, 0, fmt.Errorf("failed to read cache file: %w", err)
+	}
+	var entry Entry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return false, false, 0, nil
+	}
+	if err := json.Unmarshal(entry.Data, target); err != nil {
+		return false, false, 0, fmt.Errorf("failed to unmarshal cached data: %w", err)
+	}
+	return true, !time.Now().After(entry.ExpiresAt), time.Since(entry.CachedAt), nil
+}
+
 // NewManager creates a new cache manager using XDG cache directory.
 func NewManager() *Manager {
 	return &Manager{
@@ -35,35 +56,8 @@ func NewManager() *Manager {
 // Get retrieves a cached value if it exists and hasn't expired.
 // Returns true if the cache was found and valid, false otherwise.
 func (m *Manager) Get(key string, target any) (bool, error) {
-	path := m.keyPath(key)
-
-	data, err := os.ReadFile(path) //nolint:gosec
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to read cache file: %w", err)
-	}
-
-	var entry Entry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		// Invalid cache file, treat as miss (not an error)
-		return false, nil //nolint:nilerr // intentionally treat corrupt cache as miss
-	}
-
-	// Check if expired
-	if time.Now().After(entry.ExpiresAt) {
-		// Remove expired cache file
-		_ = os.Remove(path)
-		return false, nil
-	}
-
-	// Unmarshal the cached data into target
-	if err := json.Unmarshal(entry.Data, target); err != nil {
-		return false, fmt.Errorf("failed to unmarshal cached data: %w", err)
-	}
-
-	return true, nil
+	found, fresh, _, err := m.Lookup(key, target)
+	return found && fresh, err
 }
 
 // Set stores a value in the cache with the given TTL.
@@ -90,10 +84,18 @@ func (m *Manager) Set(key string, data any, ttl time.Duration) error {
 	}
 
 	path := m.keyPath(key)
-	if err := os.WriteFile(path, entryData, 0600); err != nil {
+	return atomicWrite(path, entryData, 0600)
+}
+
+func atomicWrite(path string, data []byte, perm os.FileMode) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, perm); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
-
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return fmt.Errorf("failed to install cache file: %w", err)
+	}
 	return nil
 }
 

@@ -83,6 +83,22 @@ func TestManager_Expiry(t *testing.T) {
 	}
 }
 
+func TestManager_LookupReturnsExpiredEntries(t *testing.T) {
+	m := &Manager{cacheDir: t.TempDir()}
+	if err := m.Set("stale", map[string]string{"value": "old"}, time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	var got map[string]string
+	found, fresh, age, err := m.Lookup("stale", &got)
+	if err != nil || !found || fresh || age <= 0 {
+		t.Fatalf("Lookup() = found:%v fresh:%v age:%v err:%v", found, fresh, age, err)
+	}
+	if got["value"] != "old" {
+		t.Fatalf("unexpected cached value: %#v", got)
+	}
+}
+
 func TestHashKey(t *testing.T) {
 	key1 := HashKey("prefix", "value1")
 	key2 := HashKey("prefix", "value2")

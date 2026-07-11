@@ -39,7 +39,7 @@ type usageRequest struct {
 }
 
 // GetUsage fetches the current usage from the usage endpoint
-func (c *Client) GetUsage() (*UsageResponse, error) {
+func (c *Client) GetUsage(ctx context.Context) (*UsageResponse, error) {
 	reqBody := usageRequest{
 		Scope: []string{"FEATURE_CODING"},
 	}
@@ -49,7 +49,7 @@ func (c *Client) GetUsage() (*UsageResponse, error) {
 		return nil, fmt.Errorf("failed to marshal request body: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+usageEndpoint, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+usageEndpoint, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -83,8 +83,8 @@ func (c *Client) GetUsage() (*UsageResponse, error) {
 }
 
 // GetSubscription fetches the subscription details from the subscription endpoint
-func (c *Client) GetSubscription() (*SubscriptionResponse, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+subscriptionEndpoint, bytes.NewBuffer([]byte("{}")))
+func (c *Client) GetSubscription(ctx context.Context) (*SubscriptionResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+subscriptionEndpoint, bytes.NewBuffer([]byte("{}")))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

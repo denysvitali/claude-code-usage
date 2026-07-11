@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,12 +14,12 @@ type Client struct {
 	AccessToken, AccountID string
 }
 
-func (c Client) GetUsage() (*UsageResponse, error) {
+func (c Client) GetUsage(ctx context.Context) (*UsageResponse, error) {
 	client := c.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequest(http.MethodGet, usageURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, usageURL, nil)
 	if err != nil {
 		return nil, err
 	}

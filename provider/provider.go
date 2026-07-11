@@ -8,18 +8,12 @@ import (
 	"time"
 )
 
-// UsageProvider fetches normalized usage for one authenticated account.
-type UsageProvider interface {
-	GetUsage(context.Context) (*Usage, error)
-}
-
-// Provider is the CLI-compatible provider contract. New reusable clients
-// should prefer UsageProvider so callers own cancellation and deadlines.
+// Provider fetches normalized usage for one authenticated account.
 type Provider interface {
+	GetUsage(context.Context) (*Usage, error)
 	Name() string
 	ShortName() string
 	ID() string
-	GetUsage() (*Usage, error)
 }
 
 // Usage is a provider-neutral usage report.

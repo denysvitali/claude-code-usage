@@ -7,8 +7,6 @@ import (
 	"github.com/denysvitali/llm-usage/providers"
 )
 
-// knownProviderIDs is a placeholder registry of supported providers.
-// It will be replaced by a real provider registry in a later phase.
 var validOutputFormats = map[string]struct{}{
 	"pretty": {},
 	"json":   {},

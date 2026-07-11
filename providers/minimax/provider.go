@@ -2,34 +2,27 @@
 package minimax
 
 import (
+	"context"
 	"time"
 
-	"github.com/denysvitali/llm-usage/internal/cache"
-	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
-)
-
-const (
-	subscriptionCacheTTL = 30 * time.Minute
 )
 
 // Provider implements the provider.Provider interface for MiniMax
 type Provider struct {
 	client *Client
-	cache  *cache.Manager
 }
 
 // NewProvider creates a new MiniMax provider with the given cookie and group ID
 func NewProvider(cookie, groupID string) *Provider {
 	return &Provider{
 		client: NewClient(cookie, groupID),
-		cache:  cache.NewManager(),
 	}
 }
 
 // Name returns the provider's display name
 func (p *Provider) Name() string {
-	return credentials.ProviderDisplayName(credentials.ProviderMiniMax)
+	return "MiniMax"
 }
 
 // ShortName returns the provider's compact label
@@ -43,8 +36,8 @@ func (p *Provider) ID() string {
 }
 
 // GetUsage fetches current usage statistics from MiniMax
-func (p *Provider) GetUsage() (*provider.Usage, error) {
-	resp, err := p.client.GetUsage()
+func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
+	resp, err := p.client.GetUsage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +57,7 @@ func (p *Provider) GetUsage() (*provider.Usage, error) {
 	}
 
 	// Fetch subscription info (with caching)
-	if sub := p.getSubscription(); sub != nil {
+	if sub, err := p.client.GetSubscription(ctx); err == nil {
 		if usage.Extra == nil {
 			usage.Extra = make(map[string]any)
 		}
@@ -106,26 +99,4 @@ func (p *Provider) parseModelRemain(item ModelRemain) *provider.UsageWindow {
 		Used:        &used,
 		Remaining:   &remaining,
 	}
-}
-
-// getSubscription fetches subscription info with caching
-func (p *Provider) getSubscription() *SubscriptionResponse {
-	cacheKey := cache.HashKey("minimax_subscription", p.client.Cookie()+p.client.GroupID())
-
-	// Try to get from cache
-	var cached SubscriptionResponse
-	if found, err := p.cache.Get(cacheKey, &cached); err == nil && found {
-		return &cached
-	}
-
-	// Fetch from API
-	sub, err := p.client.GetSubscription()
-	if err != nil {
-		return nil
-	}
-
-	// Cache the result
-	_ = p.cache.Set(cacheKey, sub, subscriptionCacheTTL)
-
-	return sub
 }

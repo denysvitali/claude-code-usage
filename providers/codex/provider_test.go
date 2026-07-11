@@ -1,6 +1,11 @@
 package codex
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"net/http"
+	"testing"
+)
 
 func TestToWindow(t *testing.T) {
 	w := toWindow("5-Hour", Window{UsedPercent: 42.5, ResetAt: 1700000000})
@@ -8,6 +13,25 @@ func TestToWindow(t *testing.T) {
 		t.Fatalf("unexpected window: %#v", w)
 	}
 }
+
+func TestClientHonorsContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := Client{AccessToken: "token", HTTPClient: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Context().Err() != context.Canceled {
+			t.Errorf("request context error = %v", req.Context().Err())
+		}
+		return nil, req.Context().Err()
+	})}}
+	_, err := client.GetUsage(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetUsage() error = %v, want context canceled", err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestProviderMetadata(t *testing.T) {
 	p := NewProvider("token", "account")

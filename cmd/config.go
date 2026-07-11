@@ -43,6 +43,40 @@ var configValidateCmd = &cobra.Command{
 	},
 }
 
+var configExplainCmd = &cobra.Command{
+	Use: "explain", Short: "Show the effective non-secret configuration", Args: cobra.NoArgs,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		path := effectiveConfigPath()
+		cfg, err := config.LoadOptional(path)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Configuration: %s\n", path)
+		if len(cfg.Providers) == 0 {
+			fmt.Println("Providers: auto-discovered")
+		} else {
+			fmt.Println("Providers:")
+			for _, p := range cfg.Providers {
+				fmt.Printf("  - %s", p.ID)
+				if len(p.Accounts) > 0 {
+					fmt.Printf(" (%d account(s))", len(p.Accounts))
+				}
+				fmt.Println()
+			}
+		}
+		fmt.Printf("Output: %s\n", defaultString(cfg.Defaults.Output.Format, "pretty"))
+		fmt.Printf("Cache: %s\n", defaultString(cfg.Defaults.Cache.TTL, "disabled"))
+		return nil
+	},
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
 func effectiveConfigPath() string {
 	if configPath != "" {
 		return configPath
@@ -52,6 +86,6 @@ func effectiveConfigPath() string {
 
 func init() {
 	configCmd.PersistentFlags().StringVar(&configPath, "file", "", "Configuration file path")
-	configCmd.AddCommand(configInitCmd, configPathCmd, configValidateCmd)
+	configCmd.AddCommand(configInitCmd, configPathCmd, configValidateCmd, configExplainCmd)
 	rootCmd.AddCommand(configCmd)
 }
