@@ -26,6 +26,7 @@ func TestV1RoundTrip(t *testing.T) {
 				Accounts: []Account{
 					{
 						Name: "personal",
+						//nolint:gosec // test-only placeholder token
 						Auth: map[string]SecretRef{
 							"access_token": "oauth-token",
 						},

@@ -24,6 +24,7 @@ func All() []Capability {
 	return result
 }
 
+// Lookup returns the capability for a provider ID, or an error if unknown.
 func Lookup(id string) (Capability, error) {
 	if definition, ok := definitionFor(id); ok {
 		return definition.Capability, nil

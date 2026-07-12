@@ -102,7 +102,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 // loadProviders loads all configured providers
 func (s *Server) loadProviders() {
-	s.providers, _ = usage.GetProviders("", "", true, false, nil, s.credsMgr)
+	s.providers, _ = usage.GetProviders("", "", true, false, false, nil, s.credsMgr)
 }
 
 // handleIndex serves the frontend HTML

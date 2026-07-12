@@ -215,6 +215,7 @@ func (m *Manager) LoadMiniMax() (*MiniMaxCredentials, error) {
 	return &creds, nil
 }
 
+// LoadCodex loads Codex credentials from the config file.
 func (m *Manager) LoadCodex() (*CodexCredentials, error) {
 	var creds CodexCredentials
 	if err := m.LoadProvider(ProviderCodex, &creds); err != nil {
@@ -223,6 +224,7 @@ func (m *Manager) LoadCodex() (*CodexCredentials, error) {
 	return &creds, nil
 }
 
+// LoadGrok loads Grok credentials from the config file.
 func (m *Manager) LoadGrok() (*GrokCredentials, error) {
 	var creds GrokCredentials
 	if err := m.LoadProvider(ProviderGrok, &creds); err != nil {
@@ -291,7 +293,7 @@ func (c *ClaudeCredentials) ListAccounts() []string {
 		return names
 	}
 	if c.ClaudeAiOauth != nil {
-		return []string{"default"}
+		return []string{DefaultAccountName}
 	}
 	return nil
 }
@@ -362,7 +364,7 @@ func (k *KimiCredentials) ListAccounts() []string {
 		return names
 	}
 	if k.APIKey != "" {
-		return []string{"default"}
+		return []string{DefaultAccountName}
 	}
 	return nil
 }

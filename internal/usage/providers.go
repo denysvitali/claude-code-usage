@@ -25,25 +25,29 @@ func LoadClaudeFromKeychain() (*credentials.OAuthCredentials, string, error) {
 	return creds.ClaudeAiOauth, credentials.DefaultAccountName, nil
 }
 
-func ProviderName(id string) string      { return registry.Name(id) }
+// ProviderName returns the display name for a provider ID.
+func ProviderName(id string) string { return registry.Name(id) }
+
+// ProviderShortName returns the short label for a provider ID.
 func ProviderShortName(id string) string { return registry.ShortName(id) }
 
 // GetProviders resolves registered provider definitions into ready instances.
-func GetProviders(providerFlag, accountFlag string, allAccounts, debug bool, configuredAccounts map[string][]string, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
+func GetProviders(providerFlag, accountFlag string, allAccounts, debug, raw bool, configuredAccounts map[string][]string, credsMgr *credentials.Manager) ([]ProviderInstance, []provider.Usage) {
 	return registry.Resolve(registry.Request{
 		Provider: providerFlag, Account: accountFlag, AllAccounts: allAccounts,
-		Debug: debug, Explicit: providerFlag != "all" && providerFlag != "",
+		Debug: debug, Raw: raw, Explicit: providerFlag != "all" && providerFlag != "",
 		ConfiguredAccounts: configuredAccounts,
 	}, credsMgr)
 }
 
-// FetchAllUsage fetches usage from all providers concurrently.
+// CacheOptions controls optional caching behavior for FetchAllUsage.
 type CacheOptions struct {
 	Manager      *cache.Manager
 	TTL          time.Duration
 	StaleIfError bool
 }
 
+// FetchAllUsage fetches usage from all providers concurrently.
 func FetchAllUsage(ctx context.Context, providers []ProviderInstance, cacheOptions CacheOptions) *provider.UsageStats {
 	var wg sync.WaitGroup
 	var mu sync.Mutex

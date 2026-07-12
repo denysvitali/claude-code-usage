@@ -1,3 +1,5 @@
+// Package config provides YAML configuration loading, validation, and atomic
+// writing for llm-usage.
 package config
 
 import (
@@ -11,6 +13,7 @@ import (
 func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	tmp := path + ".tmp"
 
+	//nolint:gosec // tmp is derived from the caller-supplied path and written with restricted permissions.
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)

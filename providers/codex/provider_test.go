@@ -5,6 +5,8 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+
+	"github.com/denysvitali/llm-usage/internal/credentials"
 )
 
 func TestToWindow(t *testing.T) {
@@ -23,7 +25,7 @@ func TestClientHonorsContextCancellation(t *testing.T) {
 		}
 		return nil, req.Context().Err()
 	})}}
-	_, err := client.GetUsage(ctx)
+	_, _, err := client.GetUsage(ctx)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("GetUsage() error = %v, want context canceled", err)
 	}
@@ -34,8 +36,8 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 func TestProviderMetadata(t *testing.T) {
-	p := NewProvider("token", "account")
-	if p.ID() != "codex" || p.ShortName() != "Cdx" {
+	p := NewProvider("token", "account", false)
+	if p.ID() != credentials.ProviderCodex || p.ShortName() != "Cdx" {
 		t.Fatalf("unexpected metadata: %s %s", p.ID(), p.ShortName())
 	}
 }

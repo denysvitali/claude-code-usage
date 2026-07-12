@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
 )
 
@@ -38,6 +40,8 @@ const (
 	barWidth = 20
 	barFull  = "█"
 	barEmpty = "░"
+
+	conciseAuthRequired = "authentication required"
 )
 
 // WaybarOutput represents the JSON format expected by waybar custom modules
@@ -119,7 +123,7 @@ func OutputWaybar(stats *provider.UsageStats) {
 // OpenAI mark comes from Font Awesome Brands; the xAI mark identifies Grok.
 func ProviderWaybarIcon(id string) string {
 	switch id {
-	case "codex":
+	case credentials.ProviderCodex:
 		return "<span font_family=\"Font Awesome 7 Brands\">\ue7cf</span>"
 	case "grok":
 		return "𝕏"
@@ -151,6 +155,40 @@ func OutputWaybarError(msg string) {
 	}
 }
 
+// OutputRaw outputs the raw provider API responses as a JSON map keyed by
+// provider ID (or "provider/account" when the account is not the default).
+func OutputRaw(stats *provider.UsageStats) {
+	out := make(map[string]json.RawMessage)
+	for _, p := range stats.Providers {
+		if p.Error != nil {
+			continue
+		}
+		raw, ok := p.Extra["raw"]
+		if !ok {
+			continue
+		}
+		rawMsg, ok := raw.(json.RawMessage)
+		if !ok {
+			continue
+		}
+		key := rawOutputKey(p.Provider, p.Extra["account"])
+		out[key] = rawMsg
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(out); err != nil {
+		fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+	}
+}
+
+func rawOutputKey(providerID string, account any) string {
+	acc, _ := account.(string)
+	if acc != "" && acc != credentials.DefaultAccountName {
+		return providerID + "/" + acc
+	}
+	return providerID
+}
+
 // OutputJSON outputs usage stats in JSON format
 func OutputJSON(stats *provider.UsageStats) {
 	enc := json.NewEncoder(os.Stdout)
@@ -169,8 +207,8 @@ func OutputPretty(stats *provider.UsageStats) {
 		if unavailable > 0 {
 			summary += fmt.Sprintf("  ·  %d unavailable", unavailable)
 		}
-		if max := stats.MaxUtilization(); max > 0 {
-			summary += fmt.Sprintf("  ·  peak %.0f%%", max)
+		if peak := stats.MaxUtilization(); peak > 0 {
+			summary += fmt.Sprintf("  ·  peak %.0f%%", peak)
 		}
 		fmt.Println(subtitleStyle.Render(summary + "  ·  updated " + time.Now().Format("15:04:05")))
 	}
@@ -284,7 +322,7 @@ func conciseError(err error) string {
 	case strings.Contains(message, "quota snapshot") || strings.Contains(message, "does not expose weekly quota"):
 		return "weekly quota snapshot required"
 	case strings.Contains(message, "401") || strings.Contains(message, "unauthenticated") || strings.Contains(message, "invalid_grant") || strings.Contains(message, "token") && strings.Contains(message, "expired"):
-		return "authentication required"
+		return conciseAuthRequired
 	case strings.Contains(message, "timeout") || strings.Contains(message, "deadline exceeded"):
 		return "request timed out"
 	case strings.Contains(message, "429") || strings.Contains(message, "rate limit"):

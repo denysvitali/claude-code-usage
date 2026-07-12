@@ -21,9 +21,10 @@ type Instance struct {
 
 // Request controls provider and account selection.
 type Request struct {
-	Provider, Account            string
-	AllAccounts, Debug, Explicit bool
-	ConfiguredAccounts           map[string][]string
+	Provider, Account       string
+	AllAccounts, Debug, Raw bool
+	Explicit                bool
+	ConfiguredAccounts      map[string][]string
 }
 
 // Definition is a compiled provider integration. New providers add one
@@ -41,6 +42,8 @@ var definitions = []Definition{
 	{Capability: Capability{ID: credentials.ProviderGrok, Name: "Grok (xAI)", Auth: "Grok CLI OAuth", Implemented: true}, Load: loadGrok},
 }
 
+// Resolve returns ready provider instances and any failures for the requested
+// providers and accounts.
 func Resolve(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
 	ids := selectedIDs(request, manager)
 	var instances []Instance
@@ -87,12 +90,15 @@ func definitionFor(id string) (Definition, bool) {
 	return Definition{}, false
 }
 
+// Name returns the display name for a provider ID.
 func Name(id string) string {
 	if d, ok := definitionFor(id); ok {
 		return d.Name
 	}
 	return strings.ToUpper(id)
 }
+
+// ShortName returns the short label for a provider ID.
 func ShortName(id string) string {
 	if d, ok := definitionFor(id); ok {
 		switch id {
@@ -112,6 +118,8 @@ func ShortName(id string) string {
 	}
 	return strings.ToUpper(id)[:1]
 }
+
+// Failure builds a normalized usage failure for the given provider and account.
 func Failure(id, account string, err error) base.Usage {
 	u := base.NewUsageError(id, credentials.ProviderDisplayName(id), err)
 	if account != "" {
@@ -131,7 +139,7 @@ func loadCodex(request Request, _ *credentials.Manager) ([]Instance, []base.Usag
 	if request.Account != "" && request.Account != credentials.DefaultAccountName {
 		return nil, []base.Usage{Failure(credentials.ProviderCodex, request.Account, fmt.Errorf("account %q not found", request.Account))}
 	}
-	return []Instance{{Provider: codex.NewProvider(creds.Tokens.AccessToken, creds.Tokens.AccountID), AccountName: credentials.DefaultAccountName}}, nil
+	return []Instance{{Provider: codex.NewProvider(creds.Tokens.AccessToken, creds.Tokens.AccountID, request.Raw), AccountName: credentials.DefaultAccountName}}, nil
 }
 
 func loadGrok(request Request, _ *credentials.Manager) ([]Instance, []base.Usage) {
@@ -145,7 +153,7 @@ func loadGrok(request Request, _ *credentials.Manager) ([]Instance, []base.Usage
 	if request.Account != "" && request.Account != credentials.DefaultAccountName {
 		return nil, []base.Usage{Failure(credentials.ProviderGrok, request.Account, fmt.Errorf("account %q not found", request.Account))}
 	}
-	return []Instance{{Provider: newGrokAdapter(creds.AccessToken), AccountName: credentials.DefaultAccountName}}, nil
+	return []Instance{{Provider: newGrokAdapter(creds.AccessToken, request.Raw), AccountName: credentials.DefaultAccountName}}, nil
 }
 
 func loadClaude(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
@@ -169,7 +177,7 @@ func loadClaude(request Request, manager *credentials.Manager) ([]Instance, []ba
 		if err != nil {
 			return nil, []base.Usage{Failure(credentials.ProviderClaude, request.Account, err)}
 		}
-		return []Instance{{Provider: claude.NewProvider(oauth.AccessToken, request.Debug), AccountName: request.Account}}, nil
+		return []Instance{{Provider: claude.NewProvider(oauth.AccessToken, request.Raw), AccountName: request.Account}}, nil
 	}
 	var instances []Instance
 	var failures []base.Usage
@@ -178,7 +186,7 @@ func loadClaude(request Request, manager *credentials.Manager) ([]Instance, []ba
 		if claude.IsExpired(cliCreds.ExpiresAt) {
 			failures = append(failures, Failure(credentials.ProviderClaude, cliAccount, fmt.Errorf("token from the Claude CLI expired - run 'claude' to re-authenticate")))
 		} else {
-			instances = append(instances, Instance{Provider: claude.NewProvider(cliCreds.AccessToken, request.Debug), AccountName: cliAccount})
+			instances = append(instances, Instance{Provider: claude.NewProvider(cliCreds.AccessToken, request.Raw), AccountName: cliAccount})
 			cliAdded = true
 		}
 	}
@@ -196,7 +204,7 @@ func loadClaude(request Request, manager *credentials.Manager) ([]Instance, []ba
 				failures = append(failures, Failure(credentials.ProviderClaude, account, err))
 				continue
 			}
-			instances = append(instances, Instance{Provider: claude.NewProvider(oauth.AccessToken, request.Debug), AccountName: account})
+			instances = append(instances, Instance{Provider: claude.NewProvider(oauth.AccessToken, request.Raw), AccountName: account})
 		}
 	}
 	return instances, failures
@@ -240,7 +248,7 @@ func refreshClaude(oauth *credentials.OAuthCredentials, account string, stored *
 func loadKimi(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
 	return loadAccounts(credentials.ProviderKimi, request, manager.LoadKimi, func(c *credentials.KimiCredentials) []string { return c.ListAccounts() }, func(c *credentials.KimiCredentials, name string) base.Provider {
 		if a := c.GetAccount(name); a != nil {
-			return kimi.NewProvider(a.APIKey)
+			return kimi.NewProvider(a.APIKey, request.Raw)
 		}
 		return nil
 	})
@@ -248,7 +256,7 @@ func loadKimi(request Request, manager *credentials.Manager) ([]Instance, []base
 func loadMiniMax(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
 	return loadAccounts(credentials.ProviderMiniMax, request, manager.LoadMiniMax, func(c *credentials.MiniMaxCredentials) []string { return c.ListAccounts() }, func(c *credentials.MiniMaxCredentials, name string) base.Provider {
 		if a := c.GetAccount(name); a != nil {
-			return minimax.NewProvider(a.Cookie, a.GroupID)
+			return minimax.NewProvider(a.Cookie, a.GroupID, request.Raw)
 		}
 		return nil
 	})

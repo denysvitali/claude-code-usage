@@ -6,8 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/denysvitali/llm-usage/internal/setup"
 	"github.com/spf13/cobra"
+
+	"github.com/denysvitali/llm-usage/internal/setup"
 )
 
 var setupRemoveYes bool

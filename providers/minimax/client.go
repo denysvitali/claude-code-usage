@@ -36,11 +36,11 @@ func NewClient(cookie, groupID string) *Client {
 }
 
 // GetUsage fetches the current usage from the coding_plan/remains endpoint
-func (c *Client) GetUsage(ctx context.Context) (*CodingPlanResponse, error) {
+func (c *Client) GetUsage(ctx context.Context) (*CodingPlanResponse, []byte, error) {
 	// Build URL with GroupId query parameter
 	reqURL, err := url.Parse(baseURL + codingPlanEndpoint)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	query := reqURL.Query()
@@ -49,7 +49,7 @@ func (c *Client) GetUsage(ctx context.Context) (*CodingPlanResponse, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("Cookie", c.cookie)
@@ -58,25 +58,25 @@ func (c *Client) GetUsage(ctx context.Context) (*CodingPlanResponse, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
 	var usage CodingPlanResponse
 	if err := json.Unmarshal(body, &usage); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
-	return &usage, nil
+	return &usage, body, nil
 }
 
 // GetSubscription fetches the subscription details from the subscription endpoint

@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/denysvitali/llm-usage/internal/app"
 	"github.com/denysvitali/llm-usage/internal/config"
 	"github.com/denysvitali/llm-usage/internal/credentials"
@@ -14,7 +16,6 @@ import (
 	"github.com/denysvitali/llm-usage/internal/version"
 	"github.com/denysvitali/llm-usage/provider"
 	registry "github.com/denysvitali/llm-usage/providers"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -23,12 +24,19 @@ var (
 	allAccountsFlag bool
 	jsonOutput      bool
 	waybarOutput    bool
+	rawOutput       bool
 	credentialsFile string
 	debugFlag       bool
 	timeoutFlag     time.Duration
 	cacheTTLFlag    time.Duration
 	staleIfError    bool
 	configFileFlag  string
+)
+
+const (
+	outputWaybar = "waybar"
+	outputJSON   = "json"
+	outputRaw    = "raw"
 )
 
 // validProviders lists the provider IDs accepted by --provider, derived from
@@ -78,8 +86,11 @@ func init() {
 	rootCmd.Flags().BoolVar(&allAccountsFlag, "all-accounts", false, "Aggregate usage across all accounts")
 	rootCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.Flags().BoolVar(&waybarOutput, "waybar", false, "Output in waybar JSON format")
+	rootCmd.Flags().BoolVar(&rawOutput, "raw", false, "Output the raw provider API responses in JSON format")
 	rootCmd.Flags().StringVar(&credentialsFile, "credentials-file", "", "Path to a combined credentials file (values may use $VAR or ${VAR} env references)")
 	rootCmd.Flags().BoolVar(&debugFlag, "debug", false, "Include raw provider API responses in the output")
+
+	rootCmd.MarkFlagsMutuallyExclusive("json", "waybar", "raw")
 	rootCmd.Flags().DurationVar(&timeoutFlag, "timeout", 30*time.Second, "Maximum time to wait for provider responses")
 	rootCmd.Flags().DurationVar(&cacheTTLFlag, "cache-ttl", 0, "Cache successful usage responses for this duration (disabled by default)")
 	rootCmd.Flags().BoolVar(&staleIfError, "stale-if-error", false, "Use expired cache data when a provider request fails")
@@ -130,17 +141,22 @@ func runUsage(_ *cobra.Command, _ []string) error {
 	}
 
 	format := cfg.Defaults.Output.Format
-	if waybarOutput {
-		format = "waybar"
-	} else if jsonOutput {
-		format = "json"
+	switch {
+	case waybarOutput:
+		format = outputWaybar
+	case jsonOutput:
+		format = outputJSON
+	case rawOutput:
+		format = outputRaw
 	}
-	isWaybar := format == "waybar"
+	isWaybar := format == outputWaybar
 	switch format {
-	case "waybar":
+	case outputWaybar:
 		usage.OutputWaybar(stats)
-	case "json":
+	case outputJSON:
 		usage.OutputJSON(stats)
+	case outputRaw:
+		usage.OutputRaw(stats)
 	default:
 		usage.OutputPretty(stats)
 	}
@@ -174,7 +190,7 @@ func newQueryOptions(cfg *config.Config) (app.QueryOptions, error) {
 	stale := staleIfError || (cfg != nil && cfg.Defaults.Cache.StaleIfError)
 	return app.QueryOptions{
 		Providers: providerFlag, Account: accountFlag, AllAccounts: allAccountsFlag,
-		Debug: debugFlag, Timeout: timeoutFlag, CacheTTL: ttl, StaleIfError: stale, Config: cfg,
+		Debug: debugFlag, Raw: debugFlag || rawOutput, Timeout: timeoutFlag, CacheTTL: ttl, StaleIfError: stale, Config: cfg,
 	}, nil
 }
 

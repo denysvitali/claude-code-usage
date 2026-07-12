@@ -15,7 +15,7 @@ func TestGetProvidersDiscoversLocalCodexSession(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "auth.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	providers, _ := GetProviders("all", "", false, false, nil, credentials.NewManager())
+	providers, _ := GetProviders("all", "", false, false, false, nil, credentials.NewManager())
 	found := false
 	for _, p := range providers {
 		if p.ID() == credentials.ProviderCodex {

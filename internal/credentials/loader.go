@@ -38,7 +38,7 @@ func LoadCodexCLI() (*CodexCredentials, error) {
 	path := filepath.Join(base, "auth.json")
 	data, err := os.ReadFile(path) //nolint:gosec // conventional user-owned auth path
 	if err != nil {
-		return nil, fmt.Errorf("Codex credentials not found at %s: %w", path, err)
+		return nil, fmt.Errorf("codex credentials not found at %s: %w", path, err)
 	}
 	var creds CodexCredentials
 	if err := json.Unmarshal(data, &creds); err != nil {
@@ -63,7 +63,7 @@ func LoadGrokCLI() (*GrokCLICredentials, error) {
 	}
 	data, err := os.ReadFile(filepath.Join(home, ".grok", "auth.json")) //nolint:gosec // conventional user-owned auth path
 	if err != nil {
-		return nil, fmt.Errorf("Grok CLI authentication not found: %w", err)
+		return nil, fmt.Errorf("grok CLI authentication not found: %w", err)
 	}
 	var sessions map[string]struct {
 		Key string `json:"key"`

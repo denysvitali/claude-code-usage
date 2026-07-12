@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +10,7 @@ import (
 
 func TestProvidersEndpoint(t *testing.T) {
 	s := NewServer(&Config{Host: "127.0.0.1", Port: 0})
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/providers", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/providers", nil)
 	res := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(res, req)
 	if res.Code != http.StatusOK {
@@ -25,7 +26,7 @@ func TestProvidersEndpoint(t *testing.T) {
 
 func TestUnknownRoute(t *testing.T) {
 	s := NewServer(&Config{Host: "127.0.0.1", Port: 0})
-	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/missing", nil)
 	res := httptest.NewRecorder()
 	s.server.Handler.ServeHTTP(res, req)
 	if res.Code != http.StatusNotFound {

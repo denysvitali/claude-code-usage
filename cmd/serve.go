@@ -7,8 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/denysvitali/llm-usage/internal/serve"
 	"github.com/spf13/cobra"
+
+	"github.com/denysvitali/llm-usage/internal/serve"
 )
 
 var (

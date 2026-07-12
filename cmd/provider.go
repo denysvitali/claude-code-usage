@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/denysvitali/llm-usage/providers"
 	"github.com/spf13/cobra"
+
+	"github.com/denysvitali/llm-usage/providers"
 )
 
 var providerCmd = &cobra.Command{Use: "provider", Short: "Inspect supported providers"}

@@ -9,6 +9,10 @@ const (
 	keyLeft        = "left"
 	keyRight       = "right"
 	accountDefault = "default"
+
+	keyUpHelp   = "↑/k"
+	keyDownHelp = "↓/j"
+	keyQuit     = "q"
 )
 
 // KeyMap defines key bindings for the TUI
@@ -39,14 +43,14 @@ func DefaultKeyMap() KeyMap {
 		},
 		Down: keyBinding{
 			keys: []string{"↓", "j"},
-			help: "down",
+			help: keyDown,
 		},
 		Enter: keyBinding{
-			keys: []string{"enter"},
+			keys: []string{keyEnter},
 			help: "select",
 		},
 		Escape: keyBinding{
-			keys: []string{"esc"},
+			keys: []string{keyEsc},
 			help: "back",
 		},
 		Quit: keyBinding{
@@ -54,15 +58,15 @@ func DefaultKeyMap() KeyMap {
 			help: "quit",
 		},
 		Back: keyBinding{
-			keys: []string{"esc"},
+			keys: []string{keyEsc},
 			help: "back",
 		},
 		Confirm: keyBinding{
-			keys: []string{"enter"},
+			keys: []string{keyEnter},
 			help: "confirm",
 		},
 		Cancel: keyBinding{
-			keys: []string{"esc"},
+			keys: []string{keyEsc},
 			help: "cancel",
 		},
 		Help: keyBinding{

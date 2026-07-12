@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/denysvitali/llm-usage/internal/credentials"
 )
 
@@ -134,7 +135,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	// Handle ESC for back navigation
-	if msg.String() == "esc" {
+	if msg.String() == keyEsc {
 		return m.goBack()
 	}
 

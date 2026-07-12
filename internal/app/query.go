@@ -20,6 +20,7 @@ type QueryOptions struct {
 	Account      string
 	AllAccounts  bool
 	Debug        bool
+	Raw          bool
 	Timeout      time.Duration
 	CacheTTL     time.Duration
 	StaleIfError bool
@@ -52,7 +53,7 @@ func (s QueryService) Query(ctx context.Context, opts QueryOptions) (*provider.U
 			}
 		}
 	}
-	providers, failures := usage.GetProviders(providerSelection, opts.Account, opts.AllAccounts, opts.Debug, configuredAccounts, s.Credentials)
+	providers, failures := usage.GetProviders(providerSelection, opts.Account, opts.AllAccounts, opts.Debug, opts.Raw, configuredAccounts, s.Credentials)
 	if len(providers) == 0 && len(failures) == 0 {
 		return nil, fmt.Errorf("no providers configured")
 	}

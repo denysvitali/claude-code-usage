@@ -8,12 +8,13 @@ import (
 	"os"
 	"strings"
 
+	"golang.org/x/term"
+
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/provider"
 	"github.com/denysvitali/llm-usage/providers/claude"
 	"github.com/denysvitali/llm-usage/providers/kimi"
 	"github.com/denysvitali/llm-usage/providers/minimax"
-	"golang.org/x/term"
 )
 
 const (
@@ -74,7 +75,7 @@ func AddAccount(mgr *credentials.Manager, providerID, accountName string) error 
 func addCodexAccount() error {
 	creds, err := credentials.LoadCodexCLI()
 	if err != nil {
-		return fmt.Errorf("Codex CLI authentication not found: %w", err)
+		return fmt.Errorf("codex CLI authentication not found: %w", err)
 	}
 	account := defaultAccountName
 	if creds.Tokens.AccountID != "" {
@@ -165,7 +166,7 @@ func addAPIKeyAccount(mgr *credentials.Manager, providerID, accountName string) 
 	fmt.Printf("Successfully added %s account '%s'!\n", displayName, accountName)
 
 	if providerID == providerKimi {
-		verifyAccount(kimi.NewProvider(apiKey))
+		verifyAccount(kimi.NewProvider(apiKey, false))
 	}
 	return nil
 }
@@ -204,7 +205,7 @@ func addMiniMaxAccount(mgr *credentials.Manager, accountName string) error {
 		return fmt.Errorf("failed to save credentials: %w", err)
 	}
 	fmt.Printf("Successfully added MiniMax account '%s'!\n", accountName)
-	verifyAccount(minimax.NewProvider(cookie, groupID))
+	verifyAccount(minimax.NewProvider(cookie, groupID, false))
 	return nil
 }
 

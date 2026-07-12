@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/denysvitali/llm-usage/internal/app"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/usage"
-	"github.com/spf13/cobra"
 )
 
 var watchInterval time.Duration

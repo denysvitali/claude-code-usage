@@ -4,9 +4,10 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/cobra"
+
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	setuptui "github.com/denysvitali/llm-usage/internal/setup/tui"
-	"github.com/spf13/cobra"
 )
 
 var setupCmd = &cobra.Command{

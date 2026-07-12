@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/denysvitali/llm-usage/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/denysvitali/llm-usage/internal/config"
 )
 
 var doctorCmd = &cobra.Command{

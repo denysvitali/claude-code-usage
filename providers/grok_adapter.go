@@ -13,8 +13,8 @@ type grokAdapter struct {
 	err    error
 }
 
-func newGrokAdapter(token string) *grokAdapter {
-	client, err := publicgrok.NewClient(publicgrok.ClientOptions{AccessToken: token})
+func newGrokAdapter(token string, captureRaw bool) *grokAdapter {
+	client, err := publicgrok.NewClient(publicgrok.ClientOptions{AccessToken: token, CaptureRaw: captureRaw})
 	return &grokAdapter{client: client, err: err}
 }
 

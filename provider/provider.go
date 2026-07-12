@@ -24,6 +24,8 @@ type Usage struct {
 	Error    error          `json:"-"`
 }
 
+// MarshalJSON serializes Usage, converting the internal error to a stable
+// JSON representation.
 func (u Usage) MarshalJSON() ([]byte, error) {
 	type encoded struct {
 		Provider string         `json:"provider"`
@@ -53,6 +55,8 @@ type UsageWindow struct {
 	Remaining   *float64   `json:"remaining,omitempty"`
 }
 
+// TimeUntilReset returns the duration until the window resets, or nil when it
+// does not reset.
 func (w UsageWindow) TimeUntilReset() *time.Duration {
 	if w.ResetsAt == nil {
 		return nil
@@ -66,6 +70,7 @@ type UsageStats struct {
 	Providers []Usage `json:"providers"`
 }
 
+// MaxUtilization returns the highest utilization across all healthy providers.
 func (s *UsageStats) MaxUtilization() float64 {
 	var maximum float64
 	for _, report := range s.Providers {
@@ -80,6 +85,7 @@ func (s *UsageStats) MaxUtilization() float64 {
 	return maximum
 }
 
+// GetClass returns a CSS class name based on the highest utilization.
 func (s *UsageStats) GetClass() string {
 	if maximum := s.MaxUtilization(); maximum >= 90 {
 		return "critical"
@@ -88,6 +94,8 @@ func (s *UsageStats) GetClass() string {
 	}
 	return "normal"
 }
+
+// ProviderByID returns the usage report for the given provider ID.
 func (s *UsageStats) ProviderByID(id string) *Usage {
 	for i := range s.Providers {
 		if s.Providers[i].Provider == id {
@@ -102,6 +110,7 @@ func NewUsageError(id, name string, err error) *Usage {
 	return &Usage{Provider: id, Error: fmt.Errorf("%s: %w", name, err)}
 }
 
+// NewUsageNotConfigured builds a normalized report for an unconfigured provider.
 func NewUsageNotConfigured(id, name string) *Usage {
 	return &Usage{Provider: id, Error: fmt.Errorf("%s: not configured", name)}
 }

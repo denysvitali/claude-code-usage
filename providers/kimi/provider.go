@@ -3,6 +3,7 @@ package kimi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -11,15 +12,25 @@ import (
 	"github.com/denysvitali/llm-usage/provider"
 )
 
+const (
+	featureCoding                   = "FEATURE_CODING"
+	subscriptionStatusActive        = "SUBSCRIPTION_STATUS_ACTIVE"
+	subscriptionStatusActiveDisplay = "Active"
+	membershipLevelBasic            = "LEVEL_BASIC"
+	membershipLevelBasicDisplay     = "Basic"
+)
+
 // Provider implements the provider.Provider interface for Kimi
 type Provider struct {
-	client *Client
+	client     *Client
+	captureRaw bool
 }
 
 // NewProvider creates a new Kimi provider with the given API key
-func NewProvider(apiKey string) *Provider {
+func NewProvider(apiKey string, captureRaw bool) *Provider {
 	return &Provider{
-		client: NewClient(apiKey),
+		client:     NewClient(apiKey),
+		captureRaw: captureRaw,
 	}
 }
 
@@ -40,7 +51,7 @@ func (p *Provider) ID() string {
 
 // GetUsage fetches current usage statistics from Kimi
 func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
-	resp, err := p.client.GetUsage(ctx)
+	resp, raw, err := p.client.GetUsage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,6 +75,13 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 	usage := &provider.Usage{
 		Provider: "kimi",
 		Windows:  windows,
+	}
+
+	if p.captureRaw {
+		if usage.Extra == nil {
+			usage.Extra = make(map[string]any)
+		}
+		usage.Extra["raw"] = json.RawMessage(raw)
 	}
 
 	// Fetch subscription info (with caching)
@@ -219,8 +237,8 @@ func (p *Provider) formatSubscriptionExtra(sub *SubscriptionResponse) map[string
 // formatSubscriptionStatus converts status constants to display strings
 func formatSubscriptionStatus(status string) string {
 	switch status {
-	case "SUBSCRIPTION_STATUS_ACTIVE":
-		return "Active"
+	case subscriptionStatusActive:
+		return subscriptionStatusActiveDisplay
 	case "SUBSCRIPTION_STATUS_CANCELLED":
 		return "Cancelled"
 	case "SUBSCRIPTION_STATUS_EXPIRED":
@@ -233,8 +251,8 @@ func formatSubscriptionStatus(status string) string {
 // formatMembershipLevel converts level constants to display strings
 func formatMembershipLevel(level string) string {
 	switch level {
-	case "LEVEL_BASIC":
-		return "Basic"
+	case membershipLevelBasic:
+		return membershipLevelBasicDisplay
 	case "LEVEL_STANDARD":
 		return "Standard"
 	case "LEVEL_PREMIUM":

@@ -10,16 +10,16 @@ import (
 
 // Provider implements the provider.Provider interface for Claude
 type Provider struct {
-	client *Client
-	debug  bool
+	client     *Client
+	captureRaw bool
 }
 
 // NewProvider creates a new Claude provider with the given access token.
-// If debug is true, the raw API response is included in Usage.Extra["raw"].
-func NewProvider(accessToken string, debug bool) *Provider {
+// If captureRaw is true, the raw API response is included in Usage.Extra["raw"].
+func NewProvider(accessToken string, captureRaw bool) *Provider {
 	return &Provider{
-		client: NewClient(accessToken),
-		debug:  debug,
+		client:     NewClient(accessToken),
+		captureRaw: captureRaw,
 	}
 }
 
@@ -116,7 +116,7 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 		}
 	}
 
-	if p.debug {
+	if p.captureRaw {
 		extra["raw"] = json.RawMessage(raw)
 	}
 

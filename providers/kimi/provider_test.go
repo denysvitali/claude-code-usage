@@ -9,7 +9,7 @@ func TestFormatSubscriptionStatus(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"SUBSCRIPTION_STATUS_ACTIVE", "Active"},
+		{subscriptionStatusActive, subscriptionStatusActiveDisplay},
 		{"SUBSCRIPTION_STATUS_CANCELLED", "Cancelled"},
 		{"SUBSCRIPTION_STATUS_EXPIRED", "Expired"},
 		{"UNKNOWN_STATUS", "UNKNOWN_STATUS"},
@@ -28,7 +28,7 @@ func TestFormatMembershipLevel(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"LEVEL_BASIC", "Basic"},
+		{membershipLevelBasic, membershipLevelBasicDisplay},
 		{"LEVEL_STANDARD", "Standard"},
 		{"LEVEL_PREMIUM", "Premium"},
 		{"LEVEL_CUSTOM", "CUSTOM"},
@@ -47,7 +47,7 @@ func TestFormatFeatureName(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"FEATURE_CODING", "Coding"},
+		{featureCoding, "Coding"},
 		{"FEATURE_CHAT", "Chat"},
 		{"FEATURE_API", "Api"},
 		{"", ""},
@@ -68,7 +68,7 @@ func TestProvider_FormatScopeLabel(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{"FEATURE_CODING", "Feature Coding"},
+		{featureCoding, "Feature Coding"},
 		{"RATE_LIMIT", "Rate Limit"},
 		{"single", "Single"},
 	}
@@ -110,15 +110,15 @@ func TestProvider_FormatSubscriptionExtra(t *testing.T) {
 		Subscription: &Subscription{
 			SubscriptionID: "sub_123",
 			CurrentEndTime: "2026-02-01T00:00:00Z",
-			Status:         "SUBSCRIPTION_STATUS_ACTIVE",
+			Status:         subscriptionStatusActive,
 			Goods: Goods{
 				Title:           "Moderato",
-				MembershipLevel: "LEVEL_BASIC",
+				MembershipLevel: membershipLevelBasic,
 			},
 		},
 		Memberships: []Membership{
 			{
-				Feature:    "FEATURE_CODING",
+				Feature:    featureCoding,
 				LeftCount:  15,
 				TotalCount: 20,
 			},

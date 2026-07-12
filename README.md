@@ -89,6 +89,7 @@ llm-usage --provider=kimi --all-accounts
 # Machine-readable output
 llm-usage --json
 llm-usage --waybar
+llm-usage --raw
 
 # Include provider response details when debugging an integration
 llm-usage --provider=codex --debug
@@ -100,6 +101,11 @@ llm-usage --cache-ttl=5m --stale-if-error
 
 The provider selector accepts `all` or these IDs: `claude`, `codex`, `grok`,
 `kimi`, and `minimax`.
+
+`--json` emits normalized provider reports. `--waybar` emits a single JSON line
+for Waybar custom modules. `--raw` emits the upstream provider API responses as
+a JSON map keyed by provider ID (or `provider/account` for non-default
+accounts). `--raw`, `--json`, and `--waybar` are mutually exclusive.
 
 ### Configure managed credentials
 

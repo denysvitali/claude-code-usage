@@ -20,6 +20,7 @@ type Defaults struct {
 	Cache  CacheDefaults  `yaml:"cache,omitempty"`
 }
 
+// CacheDefaults holds global cache settings.
 type CacheDefaults struct {
 	TTL          string `yaml:"ttl,omitempty"`
 	StaleIfError bool   `yaml:"stale_if_error,omitempty"`

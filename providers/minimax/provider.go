@@ -3,6 +3,7 @@ package minimax
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/denysvitali/llm-usage/provider"
@@ -10,13 +11,15 @@ import (
 
 // Provider implements the provider.Provider interface for MiniMax
 type Provider struct {
-	client *Client
+	client     *Client
+	captureRaw bool
 }
 
 // NewProvider creates a new MiniMax provider with the given cookie and group ID
-func NewProvider(cookie, groupID string) *Provider {
+func NewProvider(cookie, groupID string, captureRaw bool) *Provider {
 	return &Provider{
-		client: NewClient(cookie, groupID),
+		client:     NewClient(cookie, groupID),
+		captureRaw: captureRaw,
 	}
 }
 
@@ -37,7 +40,7 @@ func (p *Provider) ID() string {
 
 // GetUsage fetches current usage statistics from MiniMax
 func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
-	resp, err := p.client.GetUsage(ctx)
+	resp, raw, err := p.client.GetUsage(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +57,13 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 	usage := &provider.Usage{
 		Provider: "minimax",
 		Windows:  windows,
+	}
+
+	if p.captureRaw {
+		if usage.Extra == nil {
+			usage.Extra = make(map[string]any)
+		}
+		usage.Extra["raw"] = json.RawMessage(raw)
 	}
 
 	// Fetch subscription info (with caching)

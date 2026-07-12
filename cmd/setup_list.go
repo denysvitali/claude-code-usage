@@ -1,8 +1,9 @@
 package cmd
 
 import (
-	"github.com/denysvitali/llm-usage/internal/setup"
 	"github.com/spf13/cobra"
+
+	"github.com/denysvitali/llm-usage/internal/setup"
 )
 
 var setupListCmd = &cobra.Command{

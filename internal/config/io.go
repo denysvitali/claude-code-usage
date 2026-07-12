@@ -9,12 +9,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultFilename is the default configuration file name.
 const DefaultFilename = "config.yaml"
 
+// CurrentVersion is the supported configuration file version.
 const CurrentVersion = "1"
 
+// DefaultPath returns the default configuration file path inside the XDG
+// configuration directory.
 func DefaultPath() string { return filepath.Join(xdg.ConfigHome, "llm-usage", DefaultFilename) }
 
+// Load reads and validates the configuration file at path into cfg.
 func Load(path string, cfg *Config) error {
 	data, err := os.ReadFile(path) //nolint:gosec // path is user-selected
 	if err != nil {
@@ -29,6 +34,8 @@ func Load(path string, cfg *Config) error {
 	return nil
 }
 
+// LoadOptional reads the configuration file at path when it exists, otherwise
+// returning a zero-valued Config.
 func LoadOptional(path string) (*Config, error) {
 	cfg := new(Config)
 	if _, err := os.Stat(path); err != nil {
@@ -43,6 +50,7 @@ func LoadOptional(path string) (*Config, error) {
 	return cfg, nil
 }
 
+// Save writes cfg to path after validation, creating parent directories as needed.
 func Save(path string, cfg Config) error {
 	if err := Validate(&cfg); err != nil {
 		return err

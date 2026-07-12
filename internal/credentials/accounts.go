@@ -83,31 +83,43 @@ type CodexCredentials struct {
 	Tokens *CodexTokens `json:"tokens,omitempty"`
 }
 
+// CodexTokens contains the access material exported by the Codex CLI.
 type CodexTokens struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	AccountID    string `json:"account_id,omitempty"`
 }
 
+// Validate checks that Codex credentials include an access token.
 func (c *CodexCredentials) Validate() error {
 	if c.Tokens == nil || c.Tokens.AccessToken == "" {
 		return fmt.Errorf("no Codex access token found")
 	}
 	return nil
 }
-func (c *CodexCredentials) ID() string   { return ProviderCodex }
+
+// ID returns the provider's unique identifier.
+func (c *CodexCredentials) ID() string { return ProviderCodex }
+
+// Name returns the provider's display name.
 func (c *CodexCredentials) Name() string { return ProviderDisplayName(ProviderCodex) }
+
+// ListAccounts returns all account names for this provider.
 func (c *CodexCredentials) ListAccounts() []string {
 	if c.Tokens != nil {
 		return []string{DefaultAccountName}
 	}
 	return nil
 }
+
+// RemoveAccount reports that Codex CLI credentials cannot be removed this way.
 func (c *CodexCredentials) RemoveAccount(string) error {
-	return fmt.Errorf("Codex CLI credentials have one account")
+	return fmt.Errorf("codex CLI credentials have one account")
 }
+
+// RenameAccount reports that Codex CLI credentials cannot be renamed.
 func (c *CodexCredentials) RenameAccount(string, string) error {
-	return fmt.Errorf("Codex CLI credentials have one account")
+	return fmt.Errorf("codex CLI credentials have one account")
 }
 
 // GrokCredentials stores consumer-plan quota snapshots. xAI does not expose
@@ -116,12 +128,15 @@ func (c *CodexCredentials) RenameAccount(string, string) error {
 type GrokCredentials struct {
 	Accounts map[string]*GrokAccount `json:"accounts"`
 }
+
+// GrokAccount stores consumer-plan quota data for one Grok account.
 type GrokAccount struct {
 	WeeklyUtilization float64 `json:"weeklyUtilization"`
 	ResetsAt          string  `json:"resetsAt"`
 	Plan              string  `json:"plan,omitempty"`
 }
 
+// Validate checks that Grok credentials contain at least one valid account.
 func (g *GrokCredentials) Validate() error {
 	if len(g.Accounts) == 0 {
 		return fmt.Errorf("no Grok accounts found")
@@ -133,8 +148,14 @@ func (g *GrokCredentials) Validate() error {
 	}
 	return nil
 }
-func (g *GrokCredentials) ID() string   { return ProviderGrok }
+
+// ID returns the provider's unique identifier.
+func (g *GrokCredentials) ID() string { return ProviderGrok }
+
+// Name returns the provider's display name.
 func (g *GrokCredentials) Name() string { return ProviderDisplayName(ProviderGrok) }
+
+// ListAccounts returns all account names for this provider.
 func (g *GrokCredentials) ListAccounts() []string {
 	names := make([]string, 0, len(g.Accounts))
 	for name := range g.Accounts {
@@ -142,15 +163,21 @@ func (g *GrokCredentials) ListAccounts() []string {
 	}
 	return names
 }
+
+// GetAccount returns the named Grok account, or the default account when name is empty.
 func (g *GrokCredentials) GetAccount(name string) *GrokAccount {
 	if name == "" {
 		name = DefaultAccountName
 	}
 	return g.Accounts[name]
 }
+
+// RemoveAccount deletes a Grok account by name.
 func (g *GrokCredentials) RemoveAccount(name string) error {
 	return removeFromAccounts(g.Accounts, name)
 }
+
+// RenameAccount renames a Grok account.
 func (g *GrokCredentials) RenameAccount(oldName, newName string) error {
 	return renameInAccounts(g.Accounts, oldName, newName)
 }

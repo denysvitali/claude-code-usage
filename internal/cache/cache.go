@@ -38,7 +38,7 @@ func (m *Manager) Lookup(key string, target any) (found, fresh bool, age time.Du
 	}
 	var entry Entry
 	if err := json.Unmarshal(data, &entry); err != nil {
-		return false, false, 0, nil
+		return false, false, 0, fmt.Errorf("failed to parse cache entry: %w", err)
 	}
 	if err := json.Unmarshal(entry.Data, target); err != nil {
 		return false, false, 0, fmt.Errorf("failed to unmarshal cached data: %w", err)

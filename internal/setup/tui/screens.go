@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/setup"
 )
@@ -13,15 +14,15 @@ import (
 // updateProviderSelect handles updates for the provider selection screen
 func (m Model) updateProviderSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "up", "k":
+	case keyUp, "k":
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
 		}
-	case "down", "j":
+	case keyDown, "j":
 		if m.selectedIdx < len(AllProviders)-1 {
 			m.selectedIdx++
 		}
-	case "enter":
+	case keyEnter:
 		provider := AllProviders[m.selectedIdx]
 		// Claude requires special handling (OAuth)
 		if provider.ID == credentials.ProviderClaude {

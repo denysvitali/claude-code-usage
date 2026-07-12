@@ -19,15 +19,15 @@ var mainMenuItems = []string{
 // updateMainMenu handles updates for the main menu
 func (m Model) updateMainMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "up", "k":
+	case keyUp, "k":
 		if m.selectedIdx > 0 {
 			m.selectedIdx--
 		}
-	case "down", "j":
+	case keyDown, "j":
 		if m.selectedIdx < len(mainMenuItems)-1 {
 			m.selectedIdx++
 		}
-	case "enter", " ":
+	case keyEnter, " ":
 		return m.handleMainMenuSelection()
 	}
 
@@ -79,19 +79,19 @@ func (m Model) viewFooter() string {
 
 	switch m.screen {
 	case screenMainMenu:
-		bindings = []string{"↑/k", "↓/j", "enter", "q"}
+		bindings = []string{keyUpHelp, keyDownHelp, keyEnter, keyQuit}
 	case screenProviderSelect, screenRemoveProviderSelect:
-		bindings = []string{"↑/k", "↓/j", "enter", "esc"}
+		bindings = []string{keyUpHelp, keyDownHelp, keyEnter, keyEsc}
 	case screenAddAccountName, screenAddGroupID, screenAddAPIKey:
-		bindings = []string{"type", "enter", "esc"}
+		bindings = []string{"type", keyEnter, keyEsc}
 	case screenListAccounts:
-		bindings = []string{"esc"}
+		bindings = []string{keyEsc}
 	case screenRemoveAccountSelect, screenRemoveConfirm:
-		bindings = []string{"↑/k", "↓/j", "enter", "esc"}
+		bindings = []string{keyUpHelp, keyDownHelp, keyEnter, keyEsc}
 	case screenSuccess:
 		bindings = []string{"any key"}
 	default:
-		bindings = []string{"↑/k", "↓/j", "enter", "esc"}
+		bindings = []string{keyUpHelp, keyDownHelp, keyEnter, keyEsc}
 	}
 
 	helpParts := make([]string, 0, len(bindings))
