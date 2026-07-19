@@ -1,8 +1,134 @@
 package kimi
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
+
+// sampleUsageResponse is the documented response of
+// GET https://api.kimi.com/coding/v1/usages
+const sampleUsageResponse = `{
+  "usage": {
+    "limit": "2048",
+    "used": "214",
+    "remaining": "1834",
+    "resetTime": "2026-01-09T15:23:13.716839300Z"
+  },
+  "limits": [{
+    "window": {"duration": 300, "timeUnit": "TIME_UNIT_MINUTE"},
+    "detail": {
+      "limit": "200",
+      "used": "139",
+      "remaining": "61",
+      "resetTime": "2026-01-06T13:33:02.717479433Z"
+    }
+  }]
+}`
+
+func TestClient_GetUsage(t *testing.T) {
+	var gotMethod, gotPath, gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, sampleUsageResponse)
+	}))
+	defer server.Close()
+
+	client := NewClient("test-api-key")
+	client.baseURL = server.URL
+
+	resp, _, err := client.GetUsage(context.Background())
+	if err != nil {
+		t.Fatalf("GetUsage() error = %v", err)
+	}
+
+	if gotMethod != http.MethodGet {
+		t.Errorf("method = %q, want GET", gotMethod)
+	}
+	if gotPath != usageEndpoint {
+		t.Errorf("path = %q, want %q", gotPath, usageEndpoint)
+	}
+	if gotAuth != "Bearer test-api-key" {
+		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer test-api-key")
+	}
+
+	if resp.Usage.Limit != "2048" || resp.Usage.Used != "214" || resp.Usage.Remaining != "1834" {
+		t.Errorf("usage = %+v, want limit=2048 used=214 remaining=1834", resp.Usage)
+	}
+	if len(resp.Limits) != 1 {
+		t.Fatalf("len(limits) = %d, want 1", len(resp.Limits))
+	}
+	if resp.Limits[0].Window.Duration != 300 || resp.Limits[0].Window.TimeUnit != "TIME_UNIT_MINUTE" {
+		t.Errorf("window = %+v, want duration=300 timeUnit=TIME_UNIT_MINUTE", resp.Limits[0].Window)
+	}
+}
+
+func TestProvider_GetUsage(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != usageEndpoint {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, sampleUsageResponse)
+	}))
+	defer server.Close()
+
+	p := NewProvider("test-api-key", false)
+	p.client.baseURL = server.URL
+	p.client.subscriptionBaseURL = server.URL
+
+	usage, err := p.GetUsage(context.Background())
+	if err != nil {
+		t.Fatalf("GetUsage() error = %v", err)
+	}
+
+	if len(usage.Windows) != 2 {
+		t.Fatalf("len(windows) = %d, want 2", len(usage.Windows))
+	}
+
+	main := usage.Windows[0]
+	if main.Label != "Coding" {
+		t.Errorf("main window label = %q, want %q", main.Label, "Coding")
+	}
+	if *main.Limit != 2048 || *main.Used != 214 || *main.Remaining != 1834 {
+		t.Errorf("main window = limit %v used %v remaining %v, want 2048/214/1834", *main.Limit, *main.Used, *main.Remaining)
+	}
+	wantUtil := 214.0 / 2048.0 * 100
+	if main.Utilization != wantUtil {
+		t.Errorf("main utilization = %v, want %v", main.Utilization, wantUtil)
+	}
+	if main.ResetsAt == nil {
+		t.Error("main window resetsAt is nil")
+	}
+
+	rate := usage.Windows[1]
+	if rate.Label != "300-Minute Rate Limit" {
+		t.Errorf("rate limit window label = %q, want %q", rate.Label, "300-Minute Rate Limit")
+	}
+	if *rate.Limit != 200 || *rate.Used != 139 || *rate.Remaining != 61 {
+		t.Errorf("rate limit window = limit %v used %v remaining %v, want 200/139/61", *rate.Limit, *rate.Used, *rate.Remaining)
+	}
+}
+
+func TestUsageResponse_Unmarshal(t *testing.T) {
+	var resp UsageResponse
+	if err := json.Unmarshal([]byte(sampleUsageResponse), &resp); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if resp.Usage.ResetTime != "2026-01-09T15:23:13.716839300Z" {
+		t.Errorf("resetTime = %q", resp.Usage.ResetTime)
+	}
+	if resp.Limits[0].Detail.Remaining != "61" {
+		t.Errorf("limits[0].remaining = %q, want 61", resp.Limits[0].Detail.Remaining)
+	}
+}
 
 func TestFormatSubscriptionStatus(t *testing.T) {
 	tests := []struct {
@@ -57,26 +183,6 @@ func TestFormatFeatureName(t *testing.T) {
 		result := formatFeatureName(tc.input)
 		if result != tc.expected {
 			t.Errorf("formatFeatureName(%q) = %q, want %q", tc.input, result, tc.expected)
-		}
-	}
-}
-
-func TestProvider_FormatScopeLabel(t *testing.T) {
-	p := &Provider{}
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{featureCoding, "Feature Coding"},
-		{"RATE_LIMIT", "Rate Limit"},
-		{"single", "Single"},
-	}
-
-	for _, tc := range tests {
-		result := p.formatScopeLabel(tc.input)
-		if result != tc.expected {
-			t.Errorf("formatScopeLabel(%q) = %q, want %q", tc.input, result, tc.expected)
 		}
 	}
 }

@@ -1,21 +1,17 @@
 package kimi
 
-// UsageResponse represents the response from the Kimi usage endpoint
+// UsageResponse represents the response from the Kimi Code usage endpoint
+// (GET https://api.kimi.com/coding/v1/usages)
 type UsageResponse struct {
-	Usages []UsageItem `json:"usages"`
-}
-
-// UsageItem represents a single usage entry for a specific scope
-type UsageItem struct {
-	Scope  string      `json:"scope"`
-	Detail UsageDetail `json:"detail"`
+	Usage  UsageDetail `json:"usage"`
 	Limits []LimitItem `json:"limits"`
 }
 
-// UsageDetail contains the usage information for a scope
+// UsageDetail contains the usage information for a window
 type UsageDetail struct {
 	Limit     string `json:"limit"`
 	Used      string `json:"used"`
+	Remaining string `json:"remaining"`
 	ResetTime string `json:"resetTime"`
 }
 

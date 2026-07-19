@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
@@ -74,6 +75,9 @@ func selectedIDs(request Request, manager *credentials.Manager) []string {
 	}
 	if _, err := credentials.LoadGrokCLI(); err == nil && !slices.Contains(ids, credentials.ProviderGrok) {
 		ids = append(ids, credentials.ProviderGrok)
+	}
+	if os.Getenv(kimi.APIKeyEnvVar) != "" && !slices.Contains(ids, credentials.ProviderKimi) {
+		ids = append(ids, credentials.ProviderKimi)
 	}
 	if len(ids) == 0 {
 		return []string{credentials.ProviderClaude}
@@ -246,7 +250,18 @@ func refreshClaude(oauth *credentials.OAuthCredentials, account string, stored *
 }
 
 func loadKimi(request Request, manager *credentials.Manager) ([]Instance, []base.Usage) {
-	return loadAccounts(credentials.ProviderKimi, request, manager.LoadKimi, func(c *credentials.KimiCredentials) []string { return c.ListAccounts() }, func(c *credentials.KimiCredentials, name string) base.Provider {
+	load := func() (*credentials.KimiCredentials, error) {
+		creds, err := manager.LoadKimi()
+		if err == nil {
+			return creds, nil
+		}
+		// Fall back to the Kimi Code API key from the environment
+		if apiKey := os.Getenv(kimi.APIKeyEnvVar); apiKey != "" {
+			return &credentials.KimiCredentials{APIKey: apiKey}, nil
+		}
+		return nil, err
+	}
+	return loadAccounts(credentials.ProviderKimi, request, load, func(c *credentials.KimiCredentials) []string { return c.ListAccounts() }, func(c *credentials.KimiCredentials, name string) base.Provider {
 		if a := c.GetAccount(name); a != nil {
 			return kimi.NewProvider(a.APIKey, request.Raw)
 		}

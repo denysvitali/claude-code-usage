@@ -18,6 +18,10 @@ const (
 	subscriptionStatusActiveDisplay = "Active"
 	membershipLevelBasic            = "LEVEL_BASIC"
 	membershipLevelBasicDisplay     = "Basic"
+
+	// APIKeyEnvVar is the environment variable used as API key fallback when
+	// no stored credentials exist.
+	APIKeyEnvVar = "KIMI_CODE_API_KEY"
 )
 
 // Provider implements the provider.Provider interface for Kimi
@@ -56,19 +60,17 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 		return nil, err
 	}
 
-	windows := make([]provider.UsageWindow, 0)
+	windows := make([]provider.UsageWindow, 0, 1+len(resp.Limits))
 
-	for _, item := range resp.Usages {
-		// Add main scope window
-		if scopeWindow := p.parseScopeWindow(item); scopeWindow != nil {
-			windows = append(windows, *scopeWindow)
-		}
+	// Main coding quota window
+	if mainWindow := p.parseDetailWindow("Coding", resp.Usage); mainWindow != nil {
+		windows = append(windows, *mainWindow)
+	}
 
-		// Add rate limit windows
-		for _, limit := range item.Limits {
-			if limitWindow := p.parseLimitWindow(item.Scope, limit); limitWindow != nil {
-				windows = append(windows, *limitWindow)
-			}
+	// Rate limit windows
+	for _, limit := range resp.Limits {
+		if limitWindow := p.parseLimitWindow(limit); limitWindow != nil {
+			windows = append(windows, *limitWindow)
 		}
 	}
 
@@ -95,31 +97,39 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 	return usage, nil
 }
 
-// parseScopeWindow parses the main scope usage detail into a UsageWindow
-func (p *Provider) parseScopeWindow(item UsageItem) *provider.UsageWindow {
-	limit, err := strconv.ParseFloat(item.Detail.Limit, 64)
+// parseDetailWindow parses a usage detail into a UsageWindow with the given label
+func (p *Provider) parseDetailWindow(label string, detail UsageDetail) *provider.UsageWindow {
+	limit, err := strconv.ParseFloat(detail.Limit, 64)
 	if err != nil {
 		return nil
 	}
 
-	used, err := strconv.ParseFloat(item.Detail.Used, 64)
+	used, err := strconv.ParseFloat(detail.Used, 64)
 	if err != nil {
 		return nil
 	}
 
-	utilization := (used / limit) * 100
+	var utilization float64
+	if limit > 0 {
+		utilization = (used / limit) * 100
+	}
 
 	var resetsAt *time.Time
-	if item.Detail.ResetTime != "" {
-		if t, err := time.Parse(time.RFC3339Nano, item.Detail.ResetTime); err == nil {
+	if detail.ResetTime != "" {
+		if t, err := time.Parse(time.RFC3339Nano, detail.ResetTime); err == nil {
 			resetsAt = &t
 		}
 	}
 
 	remaining := limit - used
+	if detail.Remaining != "" {
+		if r, err := strconv.ParseFloat(detail.Remaining, 64); err == nil {
+			remaining = r
+		}
+	}
 
 	return &provider.UsageWindow{
-		Label:       p.formatScopeLabel(item.Scope),
+		Label:       label,
 		Utilization: utilization,
 		ResetsAt:    resetsAt,
 		Limit:       &limit,
@@ -129,50 +139,9 @@ func (p *Provider) parseScopeWindow(item UsageItem) *provider.UsageWindow {
 }
 
 // parseLimitWindow parses a rate limit item into a UsageWindow
-func (p *Provider) parseLimitWindow(_ string, limit LimitItem) *provider.UsageWindow {
-	limitVal, err := strconv.ParseFloat(limit.Detail.Limit, 64)
-	if err != nil {
-		return nil
-	}
-
-	usedVal, err := strconv.ParseFloat(limit.Detail.Used, 64)
-	if err != nil {
-		return nil
-	}
-
-	utilization := (usedVal / limitVal) * 100
-
-	var resetsAt *time.Time
-	if limit.Detail.ResetTime != "" {
-		if t, err := time.Parse(time.RFC3339Nano, limit.Detail.ResetTime); err == nil {
-			resetsAt = &t
-		}
-	}
-
-	remaining := limitVal - usedVal
-
+func (p *Provider) parseLimitWindow(limit LimitItem) *provider.UsageWindow {
 	label := p.formatDurationLabel(limit.Window.Duration, limit.Window.TimeUnit)
-
-	return &provider.UsageWindow{
-		Label:       label,
-		Utilization: utilization,
-		ResetsAt:    resetsAt,
-		Limit:       &limitVal,
-		Used:        &usedVal,
-		Remaining:   &remaining,
-	}
-}
-
-// formatScopeLabel formats the scope name for display
-func (p *Provider) formatScopeLabel(scope string) string {
-	// Convert FEATURE_CODING to "Feature Coding"
-	parts := strings.Split(scope, "_")
-	for i, part := range parts {
-		if len(part) > 0 {
-			parts[i] = strings.ToUpper(part[:1]) + strings.ToLower(part[1:])
-		}
-	}
-	return strings.Join(parts, " ")
+	return p.parseDetailWindow(label, limit.Detail)
 }
 
 // formatDurationLabel formats the window duration for display
