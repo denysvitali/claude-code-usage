@@ -10,8 +10,8 @@ import (
 )
 
 func TestToWindow(t *testing.T) {
-	w := toWindow("5-Hour", Window{UsedPercent: 42.5, ResetAt: 1700000000})
-	if w.Label != "5-Hour" || w.Utilization != 42.5 || w.ResetsAt == nil {
+	w := toWindow("Primary", Window{UsedPercent: 42.5, ResetAt: 1700000000})
+	if w.Label != "Primary" || w.Utilization != 42.5 || w.ResetsAt == nil {
 		t.Fatalf("unexpected window: %#v", w)
 	}
 }

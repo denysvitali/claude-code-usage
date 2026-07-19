@@ -37,10 +37,10 @@ func (p *Provider) GetUsage(ctx context.Context) (*provider.Usage, error) {
 	}
 	result := &provider.Usage{Provider: credentials.ProviderCodex}
 	if data.RateLimit.PrimaryWindow != nil {
-		result.Windows = append(result.Windows, toWindow("5-Hour", *data.RateLimit.PrimaryWindow))
+		result.Windows = append(result.Windows, toWindow("Primary", *data.RateLimit.PrimaryWindow))
 	}
 	if data.RateLimit.SecondaryWindow != nil {
-		result.Windows = append(result.Windows, toWindow("7-Day", *data.RateLimit.SecondaryWindow))
+		result.Windows = append(result.Windows, toWindow("Secondary", *data.RateLimit.SecondaryWindow))
 	}
 	if p.captureRaw {
 		if result.Extra == nil {
