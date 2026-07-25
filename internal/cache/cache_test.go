@@ -99,6 +99,72 @@ func TestManager_LookupReturnsExpiredEntries(t *testing.T) {
 	}
 }
 
+const (
+	payloadKey   = "value"
+	payloadValue = "old"
+)
+
+func TestManager_CooldownSurvivesRestartAndPreservesData(t *testing.T) {
+	dir := t.TempDir()
+	m := NewManagerAt(dir)
+	if err := m.Set("limited", map[string]string{payloadKey: payloadValue}, time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+
+	retryAt := time.Now().Add(5 * time.Minute).Round(time.Second)
+	if err := m.MarkCooldown("limited", retryAt); err != nil {
+		t.Fatalf("MarkCooldown failed: %v", err)
+	}
+
+	// A separate manager reads the same files, as a later CLI run would.
+	reopened := NewManagerAt(dir)
+	if got := reopened.Cooldown("limited"); !got.Equal(retryAt) {
+		t.Fatalf("Cooldown() = %s, want %s", got, retryAt)
+	}
+
+	var payload map[string]string
+	found, _, _, err := reopened.Lookup("limited", &payload)
+	if err != nil || !found || payload[payloadKey] != payloadValue {
+		t.Fatalf("cooldown discarded the cached payload: found:%v payload:%#v err:%v", found, payload, err)
+	}
+
+	// A successful store means the provider is answering again.
+	if err := reopened.Set("limited", map[string]string{payloadKey: "new"}, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	if got := reopened.Cooldown("limited"); !got.IsZero() {
+		t.Fatalf("Cooldown() = %s after a successful store, want zero", got)
+	}
+}
+
+func TestManager_CooldownWithoutCachedPayload(t *testing.T) {
+	m := NewManagerAt(t.TempDir())
+	retryAt := time.Now().Add(time.Minute).Round(time.Second)
+	if err := m.MarkCooldown("fresh", retryAt); err != nil {
+		t.Fatalf("MarkCooldown failed: %v", err)
+	}
+	if got := m.Cooldown("fresh"); !got.Equal(retryAt) {
+		t.Fatalf("Cooldown() = %s, want %s", got, retryAt)
+	}
+
+	// The marker carries no payload, so it must not look like a cache hit.
+	var payload map[string]string
+	found, _, _, err := m.Lookup("fresh", &payload)
+	if err != nil {
+		t.Fatalf("Lookup failed: %v", err)
+	}
+	if found {
+		t.Fatal("a cooldown marker was reported as cached data")
+	}
+}
+
+func TestManager_CooldownMissing(t *testing.T) {
+	m := NewManagerAt(t.TempDir())
+	if got := m.Cooldown("nothing"); !got.IsZero() {
+		t.Fatalf("Cooldown() = %s, want zero", got)
+	}
+}
+
 func TestHashKey(t *testing.T) {
 	key1 := HashKey("prefix", "value1")
 	key2 := HashKey("prefix", "value2")

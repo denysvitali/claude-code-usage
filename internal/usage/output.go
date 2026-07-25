@@ -236,6 +236,9 @@ func OutputPretty(stats *provider.UsageStats) {
 		}
 		fmt.Println(providerTitle)
 		fmt.Println(dividerStyle.Render(strings.Repeat("─", 34)))
+		if note := cacheNote(p.Extra); note != "" {
+			fmt.Println(dimStyle.Render(note))
+		}
 
 		for _, w := range p.Windows {
 			printUsageWindow(w.Label, &w)
@@ -314,6 +317,63 @@ func hasSubscriptionContent(value any) bool {
 		return false
 	}
 	return len(m) > 0
+}
+
+// cacheNote describes a report that was served from cache rather than fetched,
+// so frozen numbers never look like a bug.
+func cacheNote(extra map[string]any) string {
+	details, ok := extra["cache"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	note := fmt.Sprintf("cached %s ago", formatAge(time.Duration(numeric(details["age_seconds"]))*time.Second))
+	if retryAt, ok := rateLimitRetryAt(extra); ok {
+		note += fmt.Sprintf("  ·  rate limited, retrying after %s", retryAt.Local().Format("15:04:05"))
+	} else if stale, _ := details["stale"].(bool); stale {
+		note += "  ·  provider unavailable, showing the last good read"
+	}
+	return note
+}
+
+// formatAge renders a cache age, keeping second precision that
+// FormatDuration rounds away.
+func formatAge(age time.Duration) string {
+	if age < time.Minute {
+		return fmt.Sprintf("%ds", max(int(age.Seconds()), 0))
+	}
+	return FormatDuration(age)
+}
+
+// rateLimitRetryAt reports when a rate-limited provider may be contacted again.
+func rateLimitRetryAt(extra map[string]any) (time.Time, bool) {
+	details, ok := extra["rate_limit"].(map[string]any)
+	if !ok {
+		return time.Time{}, false
+	}
+	switch value := details["retry_at"].(type) {
+	case time.Time:
+		return value, true
+	case string:
+		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
+}
+
+// numeric reads a JSON-decoded number, which may arrive as either type
+// depending on whether the value round-tripped through the cache file.
+func numeric(value any) int64 {
+	switch typed := value.(type) {
+	case int:
+		return int64(typed)
+	case int64:
+		return typed
+	case float64:
+		return int64(typed)
+	default:
+		return 0
+	}
 }
 
 func conciseError(err error) string {

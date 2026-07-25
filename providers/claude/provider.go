@@ -35,7 +35,7 @@ func (p *Provider) ShortName() string {
 
 // ID returns the provider's unique identifier
 func (p *Provider) ID() string {
-	return "claude"
+	return providerID
 }
 
 // GetUsage fetches current usage statistics from Claude

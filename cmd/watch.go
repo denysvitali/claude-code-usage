@@ -16,14 +16,14 @@ var watchInterval time.Duration
 
 var watchCmd = &cobra.Command{
 	Use: "watch", Short: "Continuously refresh usage", Args: cobra.NoArgs,
-	RunE: func(_ *cobra.Command, _ []string) error {
+	RunE: func(cmd *cobra.Command, _ []string) error {
 		mgr := credentials.NewManager()
 		service := app.QueryService{Credentials: mgr}
 		cfg, err := loadRuntimeConfig()
 		if err != nil {
 			return fmt.Errorf("load configuration: %w", err)
 		}
-		opts, err := newQueryOptions(cfg)
+		opts, err := newQueryOptions(cmd, cfg)
 		if err != nil {
 			return err
 		}

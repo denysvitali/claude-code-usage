@@ -66,11 +66,11 @@ func (s QueryService) Query(ctx context.Context, opts QueryOptions) (*provider.U
 
 	result := make(chan *provider.UsageStats, 1)
 	go func() {
-		var cacheManager *cache.Manager
-		if opts.CacheTTL > 0 {
-			cacheManager = cache.NewManager()
-		}
-		stats := usage.FetchAllUsage(queryCtx, providers, usage.CacheOptions{Manager: cacheManager, TTL: opts.CacheTTL, StaleIfError: opts.StaleIfError})
+		// The manager is always created: even with caching switched off it
+		// carries the rate-limit cooldowns that keep us off a limited endpoint.
+		stats := usage.FetchAllUsage(queryCtx, providers, usage.CacheOptions{
+			Manager: cache.NewManager(), TTL: opts.CacheTTL, StaleIfError: opts.StaleIfError,
+		})
 		stats.Providers = append(stats.Providers, failures...)
 		result <- stats
 	}()

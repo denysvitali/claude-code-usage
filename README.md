@@ -96,7 +96,10 @@ llm-usage --provider=codex --debug
 
 # Bound slow provider requests
 llm-usage --timeout=15s
+
+# Tune or disable the response cache (see Rate limits)
 llm-usage --cache-ttl=5m --stale-if-error
+llm-usage --cache-ttl=0
 ```
 
 The provider selector accepts `all` or these IDs: `claude`, `codex`, `grok`,
@@ -178,6 +181,12 @@ llm-usage serve --host=127.0.0.1 --port=9090
 The default server address is `http://localhost:8080`. Use `--web-dir` when
 the web assets are stored outside the repository.
 
+The server refreshes usage from the providers at most once per `--cache-ttl`
+(one minute by default) and shares that result across every connected
+dashboard, so open tabs and refresh clicks do not each cost a provider
+request. `--stale-if-error` is on by default here: a browser sees the last good
+read instead of an error when a provider is briefly unavailable.
+
 The dashboard leads with the tightest limit across every account, and each
 meter carries a tick showing how far into that window you are — fill past the
 tick means you are spending faster than the window refills. It adapts down to
@@ -234,9 +243,30 @@ Codex displays its 5-hour and 7-day windows in order. Grok displays its
 weekly window. Use `llm-usage --waybar` without `--provider` for one combined
 module instead.
 
-Caching is disabled by default. `--cache-ttl` enables a bounded local cache;
-`--stale-if-error` permits expired values only when a live provider request
-fails.
+## Rate limits
+
+Provider usage endpoints are themselves rate limited, so llm-usage is built to
+ask for as little as it can get away with.
+
+Successful responses are cached for one minute (`--cache-ttl`, or
+`defaults.cache.ttl` in the config file). Repeated invocations inside that
+window — a bar module, a shell prompt, several dashboards — are answered from
+disk without touching the provider, and the terminal output notes how old the
+reading is. `--cache-ttl=0` disables caching entirely. `--stale-if-error`
+additionally permits expired values when a live request fails.
+
+When Claude answers `429 Too Many Requests`, llm-usage records the cooldown it
+asks for (`Retry-After`, or the `anthropic-ratelimit-*-reset` header, or one
+minute when neither is present) and stops contacting that account until the
+cooldown expires — retrying sooner only extends the lockout. During the
+cooldown the last good reading is shown, marked with the time of the next
+attempt. The cooldown is stored on disk, so it survives across invocations, and
+it is honored even when caching is disabled.
+
+The cooldown machinery is provider-neutral: any provider client that reports a
+`provider.RateLimitError` gets the same treatment. Claude is the one wired up
+today; the others still surface a 429 as a plain error and are protected only
+by the response cache.
 
 ## JSON output
 

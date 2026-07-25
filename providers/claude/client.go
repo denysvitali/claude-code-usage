@@ -8,9 +8,12 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/denysvitali/llm-usage/provider"
 )
 
 const (
+	providerID    = "claude"
 	baseURL       = "https://api.anthropic.com"
 	usageEndpoint = "/api/oauth/usage"
 	betaHeader    = "oauth-2025-04-20"
@@ -20,6 +23,7 @@ const (
 type Client struct {
 	httpClient  *http.Client
 	accessToken string
+	baseURL     string
 }
 
 // NewClient creates a new API client with the given access token
@@ -29,6 +33,7 @@ func NewClient(accessToken string) *Client {
 			Timeout: 30 * time.Second,
 		},
 		accessToken: accessToken,
+		baseURL:     baseURL,
 	}
 }
 
@@ -36,7 +41,7 @@ func NewClient(accessToken string) *Client {
 // It also returns the raw response body, which is useful for debugging
 // fields the API returns that aren't yet mapped to UsageResponse.
 func (c *Client) GetUsage(ctx context.Context) (*UsageResponse, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+usageEndpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+usageEndpoint, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -56,6 +61,12 @@ func (c *Client) GetUsage(ctx context.Context) (*UsageResponse, []byte, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		// Surfaced as a typed error so the caller can back off instead of
+		// retrying into the same limit on the next invocation.
+		return nil, nil, provider.NewRateLimitError(providerID, resp.Header, string(body))
 	}
 
 	if resp.StatusCode != http.StatusOK {

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/denysvitali/llm-usage/internal/app"
+	"github.com/denysvitali/llm-usage/internal/cache"
 	"github.com/denysvitali/llm-usage/internal/config"
 	"github.com/denysvitali/llm-usage/internal/credentials"
 	"github.com/denysvitali/llm-usage/internal/usage"
@@ -92,7 +93,7 @@ func init() {
 
 	rootCmd.MarkFlagsMutuallyExclusive("json", "waybar", "raw")
 	rootCmd.Flags().DurationVar(&timeoutFlag, "timeout", 30*time.Second, "Maximum time to wait for provider responses")
-	rootCmd.Flags().DurationVar(&cacheTTLFlag, "cache-ttl", 0, "Cache successful usage responses for this duration (disabled by default)")
+	rootCmd.Flags().DurationVar(&cacheTTLFlag, "cache-ttl", cache.DefaultTTL, "Cache successful usage responses for this duration (0 disables caching)")
 	rootCmd.Flags().BoolVar(&staleIfError, "stale-if-error", false, "Use expired cache data when a provider request fails")
 	rootCmd.Flags().StringVar(&configFileFlag, "config", "", "Configuration file path (default: XDG config path)")
 
@@ -115,7 +116,7 @@ func init() {
 	}})
 }
 
-func runUsage(_ *cobra.Command, _ []string) error {
+func runUsage(cmd *cobra.Command, _ []string) error {
 	var credsMgr *credentials.Manager
 	if credentialsFile != "" {
 		credsMgr = credentials.NewManagerFromFile(credentialsFile)
@@ -127,7 +128,7 @@ func runUsage(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
 	}
-	opts, err := newQueryOptions(cfg)
+	opts, err := newQueryOptions(cmd, cfg)
 	if err != nil {
 		return err
 	}
@@ -178,14 +179,20 @@ func loadRuntimeConfig() (*config.Config, error) {
 	return config.LoadOptional(path)
 }
 
-func newQueryOptions(cfg *config.Config) (app.QueryOptions, error) {
-	ttl := cacheTTLFlag
-	if ttl == 0 && cfg != nil && cfg.Defaults.Cache.TTL != "" {
+// newQueryOptions resolves the effective query settings. The cache TTL comes
+// from the built-in default, overridden by the config file, overridden in turn
+// by an explicit --cache-ttl (which alone can set it to 0 and disable caching).
+func newQueryOptions(cmd *cobra.Command, cfg *config.Config) (app.QueryOptions, error) {
+	ttl := cache.DefaultTTL
+	if cfg != nil && cfg.Defaults.Cache.TTL != "" {
 		parsed, err := time.ParseDuration(cfg.Defaults.Cache.TTL)
 		if err != nil {
 			return app.QueryOptions{}, fmt.Errorf("parse cache TTL: %w", err)
 		}
 		ttl = parsed
+	}
+	if cmd != nil && cmd.Flags().Changed("cache-ttl") {
+		ttl = cacheTTLFlag
 	}
 	stale := staleIfError || (cfg != nil && cfg.Defaults.Cache.StaleIfError)
 	return app.QueryOptions{

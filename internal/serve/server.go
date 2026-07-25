@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/denysvitali/llm-usage/internal/app"
@@ -26,6 +27,12 @@ type Config struct {
 	Host   string
 	Port   int
 	WebDir string
+	// CacheTTL bounds how often the server refreshes usage from the upstream
+	// providers, regardless of how many dashboards are polling it. Zero
+	// disables caching, which makes rate limiting far more likely.
+	CacheTTL time.Duration
+	// StaleIfError serves the last good read when a provider is unavailable.
+	StaleIfError bool
 }
 
 // Server represents the HTTP server
@@ -35,6 +42,9 @@ type Server struct {
 	server    *http.Server
 	providers []usage.ProviderInstance
 	static    http.Handler
+	// queryMu serializes upstream refreshes: with several dashboards open, the
+	// first request fetches and the rest read the cache it just filled.
+	queryMu sync.Mutex
 }
 
 // NewServer creates a new HTTP server
@@ -142,12 +152,16 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	providerFilter := r.URL.Query().Get("provider")
 	accountFilter := r.URL.Query().Get("account")
 
+	s.queryMu.Lock()
 	stats, err := (app.QueryService{Credentials: s.credsMgr}).Query(r.Context(), app.QueryOptions{
-		Providers:   providerFilter,
-		Account:     accountFilter,
-		AllAccounts: accountFilter == "",
-		Timeout:     30 * time.Second,
+		Providers:    providerFilter,
+		Account:      accountFilter,
+		AllAccounts:  accountFilter == "",
+		Timeout:      30 * time.Second,
+		CacheTTL:     s.config.CacheTTL,
+		StaleIfError: s.config.StaleIfError,
 	})
+	s.queryMu.Unlock()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
