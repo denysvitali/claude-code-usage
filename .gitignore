@@ -52,3 +52,4 @@ credentials.json
 tmp/
 
 .claude/settings.local.json
+.sentry-native
