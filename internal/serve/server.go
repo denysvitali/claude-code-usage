@@ -34,6 +34,7 @@ type Server struct {
 	credsMgr  *credentials.Manager
 	server    *http.Server
 	providers []usage.ProviderInstance
+	static    http.Handler
 }
 
 // NewServer creates a new HTTP server
@@ -50,8 +51,10 @@ func NewServer(cfg *Config) *Server {
 		},
 	}
 
+	s.static = newStaticHandler(cfg.WebDir)
+
 	// Register routes
-	mux.HandleFunc("GET /", s.handleIndex)
+	mux.HandleFunc("GET /", s.handleStatic)
 	mux.HandleFunc("GET /api/v1/usage", s.handleUsage)
 	mux.HandleFunc("GET /api/v1/providers", s.handleProviders)
 
@@ -105,25 +108,29 @@ func (s *Server) loadProviders() {
 	s.providers, _ = usage.GetProviders("", "", true, false, false, nil, s.credsMgr)
 }
 
-// handleIndex serves the frontend HTML
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	// First try to serve from disk (for development)
-	if s.config.WebDir != "" {
-		indexPath := filepath.Join(s.config.WebDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			http.ServeFile(w, r, indexPath)
-			return
+// newStaticHandler serves the web UI from webDir when it exists (for
+// development), falling back to the assets embedded in the binary.
+func newStaticHandler(webDir string) http.Handler {
+	if webDir != "" {
+		if _, err := os.Stat(filepath.Join(webDir, "index.html")); err == nil {
+			return http.FileServer(http.Dir(webDir))
 		}
 	}
 
-	// Fall back to embedded filesystem
 	webFS, err := fs.Sub(embeddedFS, "web")
 	if err != nil {
-		http.Error(w, "Failed to load embedded files", http.StatusInternalServerError)
-		return
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "Failed to load embedded files", http.StatusInternalServerError)
+		})
 	}
+	return http.FileServer(http.FS(webFS))
+}
 
-	http.FileServer(http.FS(webFS)).ServeHTTP(w, r)
+// handleStatic serves the web UI assets. Responses are revalidated on every
+// load so an upgraded binary never serves a stale UI from the browser cache.
+func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-cache")
+	s.static.ServeHTTP(w, r)
 }
 
 // handleUsage returns usage statistics for all providers

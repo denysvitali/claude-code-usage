@@ -1,0 +1,689 @@
+/* llm usage — quota monitor
+   Layout responds to the *window* (container queries), not the device, so the
+   same page works pinned to a 280px strip or opened full screen. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* Nothing may widen the document: every layout below is free to clip, never
+   to push the page sideways. */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Beats the display values set on .banner, .filters and friends. */
+[hidden] { display: none !important; }
+
+:root {
+  color-scheme: dark;
+
+  --plane:      #0b0d10;
+  --surface:    #14171c;
+  --surface-2:  #1a1e25;
+  --hairline:   #252b34;
+  --track:      #232932;
+
+  --ink:        #eaeef4;
+  --ink-2:      #9aa5b4;
+  --ink-3:      #7f8a99;
+
+  /* Status palette — fixed, never themed. Meaning always rides with a glyph
+     and a number; these hexes only ever paint marks, never body text. */
+  --good:       #0ca30c;
+  --warning:    #fab219;
+  --serious:    #ec835a;
+  --critical:   #d03b3b;
+  --focus:      #5aa2ff;
+
+  --fill-ring:  transparent;
+
+  --p-claude:   #d95926;
+  --p-codex:    #199e70;
+  --p-grok:     #9085e9;
+  --p-kimi:     #3987e5;
+  --p-minimax:  #d55181;
+  --p-zai:      #c98500;
+
+  --r:          10px;
+  --ease:       cubic-bezier(.22, .61, .36, 1);
+}
+
+/* Theme lives on the root element so inherited colour is themed too — scoping
+   these to a descendant leaves body text on the other mode's ink. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --plane:     #eef1f5;
+  --surface:   #ffffff;
+  --surface-2: #f6f8fa;
+  --hairline:  #e2e6ec;
+  --track:     #e5e9ef;
+  --ink:       #0f1216;
+  --ink-2:     #4b5563;
+  --ink-3:     #6b7480;
+  /* On light surfaces two status steps sit under 3:1 by design; a hairline
+     ring around every fill restores the edge without re-theming the hue. */
+  --fill-ring: rgb(0 0 0 / .16);
+  --p-claude:  #eb6834;
+  --p-codex:   #1baf7a;
+  --p-grok:    #4a3aa7;
+  --p-kimi:    #2a78d6;
+  --p-minimax: #e87ba4;
+  --p-zai:     #eda100;
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="auto"] {
+    color-scheme: light;
+    --plane:     #eef1f5;
+    --surface:   #ffffff;
+    --surface-2: #f6f8fa;
+    --hairline:  #e2e6ec;
+    --track:     #e5e9ef;
+    --ink:       #0f1216;
+    --ink-2:     #4b5563;
+    --ink-3:     #6b7480;
+    --fill-ring: rgb(0 0 0 / .16);
+    --p-claude:  #eb6834;
+    --p-codex:   #1baf7a;
+    --p-grok:    #4a3aa7;
+    --p-kimi:    #2a78d6;
+    --p-minimax: #e87ba4;
+    --p-zai:     #eda100;
+  }
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--plane);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Only the list scrolls; the toolbar stays reachable at any height. */
+.app {
+  container-type: inline-size;
+  container-name: app;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--plane);
+
+  --pad:         14px;
+  --detail:      flex;   /* footer rows that are flex by nature */
+  --detail-block: block; /* prose-shaped detail — must stay block to wrap */
+  --btn-label:   inline;
+  --brand:       inline;
+  --clock:       block;
+  --win-gap:     14px;
+  --grid-min:    270px;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────── */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 var(--pad);
+  height: 44px;
+  flex: none;
+  min-width: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
+
+/* Reads as the global state light: colour + a size pulse while fetching. */
+.brand-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink-3) 18%, transparent);
+  transition: background .3s var(--ease), box-shadow .3s var(--ease);
+}
+.brand-mark[data-status="good"]     { background: var(--good);     box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 18%, transparent); }
+.brand-mark[data-status="warning"]  { background: var(--warning);  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 18%, transparent); }
+.brand-mark[data-status="critical"] { background: var(--critical); box-shadow: 0 0 0 3px color-mix(in srgb, var(--critical) 20%, transparent); }
+:root[data-loading="1"] .brand-mark { animation: breathe 1.1s ease-in-out infinite; }
+
+@keyframes breathe {
+  50% { transform: scale(.6); opacity: .5; }
+}
+
+.brand-name { display: var(--brand); }
+
+/* Gives up its width first: it's the least important thing in the bar. */
+.freshness {
+  display: var(--clock);
+  margin: 0 auto 0 0;
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.freshness[data-stale="1"] { color: var(--serious); }
+
+.bar-actions { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--hairline); }
+.btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.btn-label { display: var(--btn-label); }
+
+.btn-go { color: var(--ink); }
+:root[data-loading="1"] .btn-go svg { animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+
+/* One icon per state, rather than a separate label. */
+.ico-dark, .ico-light, .ico-auto, .ico-comfy, .ico-dense { display: none; }
+:root[data-theme="auto"]   .ico-auto,
+:root[data-theme="dark"]   .ico-dark,
+:root[data-theme="light"]  .ico-light,
+:root[data-density="auto"] .ico-comfy,
+:root[data-density="dense"] .ico-dense { display: block; }
+
+/* ── Filters ─────────────────────────────────────────────────────────── */
+
+/* Scrolls sideways rather than wrapping — vertical space is the scarce one.
+   The mask is the affordance that says there's more. */
+.filters {
+  display: flex;
+  gap: 5px;
+  flex: none;
+  min-width: 0;
+  padding: 8px var(--pad);
+  background: var(--surface);
+  border-bottom: 1px solid var(--hairline);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.filters::-webkit-scrollbar { display: none; }
+.filters[data-scrollable="1"] { mask-image: linear-gradient(90deg, #000 calc(100% - 22px), transparent); }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, opacity .15s;
+}
+.pill:hover { color: var(--ink); }
+.pill[aria-pressed="false"] { opacity: .5; }
+.pill[aria-pressed="true"] { background: var(--surface-2); color: var(--ink); border-color: color-mix(in srgb, var(--ink-3) 45%, transparent); }
+.pill .dot { width: 7px; height: 7px; }
+
+/* ── Scroll region ───────────────────────────────────────────────────── */
+
+.main {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: var(--pad);
+  display: flex;
+  flex-direction: column;
+  gap: var(--pad);
+}
+
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 9px 11px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--critical) 12%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--critical) 35%, transparent);
+  font-size: 12px;
+  color: var(--ink);
+}
+.banner b { font-weight: 600; }
+
+/* ── Hero: the tightest limit right now ──────────────────────────────── */
+
+.hero {
+  padding: 12px 14px 13px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+
+.hero-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.hero-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 7px 0 9px;
+  flex-wrap: wrap;
+}
+.hero-what {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.01em;
+  overflow-wrap: anywhere;
+}
+.hero-pct {
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.hero-when {
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.hero .meter { height: 9px; }
+
+.hero-note {
+  display: var(--detail);
+  align-items: center;
+  gap: 6px;
+  margin: 9px 0 0;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.hero-legend { min-width: 0; overflow-wrap: anywhere; }
+.hero-note .tickmark {
+  width: 2px;
+  height: 11px;
+  border-radius: 1px;
+  background: var(--ink-3);
+  flex: none;
+}
+
+/* ── Cards ───────────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--grid-min)), 1fr));
+  gap: 10px;
+  align-content: start;
+  align-items: start;   /* cards size to their content, not to the tallest neighbour */
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  padding: 11px 13px 13px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  transition: border-color .2s;
+}
+.card:hover { border-color: color-mix(in srgb, var(--ink-3) 40%, var(--hairline)); }
+.card[data-state="down"] { background: var(--surface); }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+/* Six hues can't stay distinct under colour-vision deficiency, so the mark
+   carries a shape too. The provider's name is always right beside it — the
+   mark reinforces identity, it never has to carry it alone. */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+  background: var(--accent, var(--ink-3));
+}
+.dot[data-p="kimi"]    { border-radius: 50%; }
+.dot[data-p="codex"]   { border-radius: 1px; transform: rotate(45deg) scale(.86); }
+.dot[data-p="minimax"] { border-radius: 0; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.dot[data-p="grok"]    { border-radius: 0; clip-path: polygon(50% 0, 100% 38%, 82% 100%, 18% 100%, 0 38%); }
+.dot[data-p="zai"]     { border-radius: 1px; height: 4px; }
+
+.card-name {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-account {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.card-account:empty { display: none; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  flex: none;
+  padding: 1px 7px 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+}
+.chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: var(--ink-3);
+}
+.chip[data-status="good"]::before     { background: var(--good);     border-radius: 50%; }
+.chip[data-status="warning"]::before  { background: var(--warning);  clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.chip[data-status="critical"]::before { background: var(--critical); clip-path: polygon(50% 0, 100% 35%, 82% 100%, 18% 100%, 0 35%); }
+.chip[data-status="down"]::before     { background: var(--ink-3); border-radius: 50%; clip-path: none; }
+
+.card-body { display: flex; flex-direction: column; gap: var(--win-gap); margin-top: 11px; min-width: 0; }
+.card-body:empty { display: none; }
+.win { min-width: 0; }
+
+/* ── Windows ─────────────────────────────────────────────────────────── */
+
+.win-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+.win-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.win-pct {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+
+.meter {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--track);
+}
+.meter-fill {
+  height: 100%;
+  width: 0;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--ink-3);
+  box-shadow: inset 0 0 0 1px var(--fill-ring);
+  transition: width .55s var(--ease), background-color .3s;
+}
+.meter[data-status="good"]     .meter-fill { background: var(--good); }
+.meter[data-status="warning"]  .meter-fill { background: var(--warning); }
+.meter[data-status="critical"] .meter-fill { background: var(--critical); }
+
+/* The signature mark: where you'd be if you spent this window evenly.
+   Fill past the tick means you're outrunning the refill. */
+.meter-pace {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  border-radius: 1px;
+  transform: translateX(-1px);
+  background: var(--ink-2);
+  box-shadow: 0 0 0 1.5px var(--surface);
+  transition: left .55s var(--ease);
+}
+.meter-pace[data-over="1"] { background: var(--serious); }
+
+.win-foot {
+  display: var(--detail);
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 5px;
+  font-size: 10.5px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.win-reset { margin-left: auto; white-space: nowrap; }
+.win-reset[data-over="1"] { color: var(--serious); }
+.win-amounts { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* When detail rows are hidden the reset time is too useful to lose — it moves
+   up beside the percentage instead. */
+.win-inline {
+  display: none;
+  font-size: 11px;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.win-inline[data-over="1"] { color: var(--serious); }
+
+/* ── Notes: subscriptions, credits, failures ─────────────────────────── */
+
+.note {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.note-down {
+  background: color-mix(in srgb, var(--critical) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--critical) 30%, transparent);
+  color: var(--ink);
+}
+.note-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 4px;
+}
+.note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--plane);
+}
+/* Block, not flex: it's a sentence with a <code> chip in it, and a flex item
+   refuses to shrink below its own text — which pushed the card out of frame. */
+.note-hint { display: var(--detail-block); margin: 5px 0 0; color: var(--ink-3); font-size: 10.5px; }
+
+.kv { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.kv + .kv { margin-top: 3px; }
+.kv > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-v { margin-left: auto; flex: none; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── Empty & skeleton ────────────────────────────────────────────────── */
+
+.blank {
+  margin: auto;
+  padding: 24px 18px;
+  text-align: center;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  max-width: 34ch;
+}
+.blank p { margin: 0 0 8px; }
+.blank code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--ink);
+}
+
+.skel {
+  height: 74px;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  animation: fade 1.4s ease-in-out infinite;
+}
+.skel:nth-child(2) { animation-delay: .12s; }
+.skel:nth-child(3) { animation-delay: .24s; }
+@keyframes fade { 50% { opacity: .45; } }
+
+.card, .hero { animation: rise .32s var(--ease) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } }
+
+/* ── Density: automatic by width, or forced ──────────────────────────── */
+
+@container app (max-width: 620px) {
+  .bar, .filters, .main { --btn-label: none; --grid-min: 100%; }
+}
+
+@container app (max-width: 460px) {
+  .bar, .filters, .main {
+    --pad: 10px;
+    --detail: none;
+    --detail-block: none;
+    --win-gap: 10px;
+  }
+  .win-inline { display: block; }
+  .hero-when { margin-left: 0; }
+  .card { padding: 9px 11px 11px; }
+  .card-body { margin-top: 9px; }
+}
+
+@container app (max-width: 360px) {
+  .bar, .filters, .main { --brand: none; --pad: 8px; }
+  .bar { gap: 7px; }
+  .btn { padding: 0 5px; }
+  .card-account { display: none; }
+  .hero-line { margin-bottom: 7px; }
+}
+
+/* Last stop before unusable: the clock goes, the icons stay. */
+@container app (max-width: 270px) {
+  .bar, .filters, .main { --clock: none; }
+  .bar { gap: 4px; padding: 0 6px; }
+  .btn { padding: 0 4px; gap: 4px; }
+  .filters { padding: 6px; }
+  .hero-eyebrow { display: none; }
+}
+
+:root[data-density="dense"] .bar,
+:root[data-density="dense"] .filters,
+:root[data-density="dense"] .main {
+  --detail: none;
+  --detail-block: none;
+  --win-gap: 9px;
+  --grid-min: 230px;
+}
+:root[data-density="dense"] .win-inline { display: block; }
+:root[data-density="dense"] .card { padding: 8px 11px 10px; }
+:root[data-density="dense"] .card-body { margin-top: 8px; }
+:root[data-density="dense"] .hero { padding: 9px 12px 11px; }
+:root[data-density="dense"] .main { gap: 9px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

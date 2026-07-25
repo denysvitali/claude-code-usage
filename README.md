@@ -178,6 +178,22 @@ llm-usage serve --host=127.0.0.1 --port=9090
 The default server address is `http://localhost:8080`. Use `--web-dir` when
 the web assets are stored outside the repository.
 
+The dashboard leads with the tightest limit across every account, and each
+meter carries a tick showing how far into that window you are — fill past the
+tick means you are spending faster than the window refills. It adapts down to
+roughly 240px wide, so it works pinned to a narrow strip beside an editor.
+
+| Key | Action |
+|-----|--------|
+| `r` | Refresh now |
+| `s` | Sort by urgency or name |
+| `d` | Comfortable or dense layout |
+| `t` | Theme: auto, dark, light |
+
+Preferences persist per browser. To pin a mode instead — handy when launching
+the dashboard into a fixed panel — append `?theme=dark`, `?density=dense`, or
+`?sort=name` to the URL.
+
 ### Shell completion
 
 ```bash

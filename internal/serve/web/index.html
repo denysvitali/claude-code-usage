@@ -1,516 +1,100 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="auto" data-density="auto">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LLM Usage Dashboard</title>
-    <!-- Tailwind CSS via CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Alpine.js via CDN -->
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    <!-- Alpine.js Collapse plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.x.x/dist/cdn.min.js"></script>
-    <style>
-        [x-cloak] { display: none !important; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>llm usage</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>">
+<link rel="stylesheet" href="app.css">
+<script>
+  // Stamp preferences before first paint so the page never flashes the wrong
+  // theme. ?theme= and ?density= pin a mode for this load without saving it —
+  // handy when the dashboard is launched into a fixed panel.
+  (function () {
+    var el = document.documentElement;
+    try {
+      var saved = JSON.parse(localStorage.getItem('llm-usage.prefs') || '{}');
+      if (saved.theme) el.dataset.theme = saved.theme;
+      if (saved.density) el.dataset.density = saved.density;
+    } catch (e) { /* private mode */ }
+    var query = new URLSearchParams(location.search);
+    if (/^(auto|dark|light)$/.test(query.get('theme'))) el.dataset.theme = query.get('theme');
+    if (/^(auto|dense)$/.test(query.get('density'))) el.dataset.density = query.get('density');
+  })();
+</script>
 </head>
-<body class="bg-gray-900 text-gray-100 min-h-screen">
-    <div x-data="usageDashboard()" x-cloak class="container mx-auto px-2 sm:px-4 py-4 sm:py-8 max-w-6xl">
-        <!-- Header -->
-        <header class="mb-6 sm:mb-8">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                    <h1 class="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">LLM Usage Dashboard</h1>
-                    <p class="text-gray-400 text-sm">Real-time usage statistics across all providers</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2 sm:gap-4">
-                    <!-- Compact/Expand toggle -->
-                    <button @click="compactMode = !compactMode"
-                            class="px-2 sm:px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-1.5 text-xs sm:text-sm">
-                        <svg x-show="compactMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
-                        </svg>
-                        <svg x-show="!compactMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-                        </svg>
-                        <span class="hidden sm:inline" x-text="compactMode ? 'Expand' : 'Collapse'"></span>
-                    </button>
-                    <!-- Auto-refresh toggle -->
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" x-model="autoRefresh" class="w-4 h-4 rounded">
-                        <span class="text-sm text-gray-400 hidden sm:inline">Auto-refresh</span>
-                    </label>
-                    <!-- Refresh button -->
-                    <button @click="refresh()"
-                            :disabled="loading"
-                            class="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 rounded-lg transition-colors flex items-center gap-2">
-                        <svg x-show="!loading" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <svg x-show="loading" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <span class="hidden sm:inline">Refresh</span>
-                    </button>
-                </div>
-            </div>
-            <!-- Provider filters -->
-            <div class="mt-3 sm:mt-4 flex items-start sm:items-center gap-2 flex-wrap">
-                <span class="text-xs sm:text-sm text-gray-400 pt-1 sm:pt-0">Filter:</span>
-                <button @click="toggleProvider('all')"
-                        :class="selectedProviders.includes('all') ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
-                        class="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors">
-                    All
-                </button>
-                <template x-for="provider in availableProviders" :key="provider.id">
-                    <button @click="toggleProvider(provider.id)"
-                            :class="selectedProviders.includes(provider.id) ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
-                            class="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors"
-                            x-text="provider.name">
-                    </button>
-                </template>
-            </div>
+<body>
+<div class="app" id="app">
 
-            <!-- Sort controls -->
-            <div class="mt-2 sm:mt-3 flex items-start sm:items-center gap-2 flex-wrap">
-                <span class="text-xs sm:text-sm text-gray-400 pt-1 sm:pt-0">Sort:</span>
-                <button @click="sortBy = 'name'"
-                        :class="sortBy === 'name' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
-                        class="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors">
-                    Name
-                </button>
-                <button @click="sortBy = 'usage'"
-                        :class="sortBy === 'usage' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
-                        class="px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm transition-colors">
-                    Usage
-                </button>
-            </div>
-        </header>
+  <header class="bar">
+    <h1 class="brand">
+      <span class="brand-mark" id="brandMark" aria-hidden="true"></span>
+      <span class="brand-name">llm usage</span>
+    </h1>
 
-        <!-- Error state -->
-        <div x-show="error" x-transition class="mb-6 bg-red-900/50 border border-red-700 rounded-lg p-4">
-            <p class="text-red-300">
-                <svg class="w-5 h-5 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                </svg>
-                <span x-text="error"></span>
-            </p>
-        </div>
+    <p class="freshness" id="freshness" aria-live="polite">Loading</p>
 
-        <!-- Loading state -->
-        <div x-show="loading && !stats" class="flex items-center justify-center py-20">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-        </div>
-
-        <!-- Stats grid -->
-        <div x-show="stats?.providers?.length > 0" class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            <template x-for="(provider, index) in filteredStats" :key="provider.provider + '-' + (provider.extra?.account || index)">
-                <div x-data="{ expanded: !compactMode }" class="bg-gray-800 rounded-xl p-3 border border-gray-700 hover:border-gray-600 transition-colors">
-                    <!-- Compact header - always visible -->
-                    <div @click="expanded = !expanded" class="flex items-center justify-between cursor-pointer select-none">
-                        <div class="min-w-0 flex items-center gap-2">
-                            <span class="text-sm font-medium text-white truncate" x-text="getProviderName(provider.provider)"></span>
-                            <span x-show="provider.extra?.account" class="text-xs text-gray-500 truncate" x-text="'(' + provider.extra.account + ')'"></span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <span :class="getUtilizationClass(provider)" class="text-xs font-bold px-1.5 py-0.5 rounded" x-text="getMaxUtilization(provider) + '%'"></span>
-                            <svg :class="expanded ? 'rotate-180' : ''" class="w-4 h-4 text-gray-500 transition-transform flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                            </svg>
-                        </div>
-                    </div>
-
-                    <!-- Collapsible content -->
-                    <div x-show="expanded" x-collapse class="mt-3">
-                    <!-- Error state for provider -->
-                    <div x-show="provider.error" class="text-red-400 text-sm bg-red-900/30 rounded-lg p-3">
-                        <svg class="w-3 h-3 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                        </svg>
-                        <span x-text="provider.error?.message || 'Error fetching usage'"></span>
-                    </div>
-
-                    <!-- Usage windows -->
-                    <div x-show="!provider.error && provider.windows && provider.windows.length > 0" class="space-y-4">
-                        <template x-for="window in provider.windows" :key="window.label">
-                            <div class="space-y-2">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-300" x-text="window.label"></span>
-                                    <span class="text-sm text-gray-400" x-text="formatUtilization(window.utilization)"></span>
-                                </div>
-                                <!-- Progress bar -->
-                                <div class="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
-                                    <div :class="getUtilizationClass({windows: [window]})"
-                                         class="h-2.5 rounded-full transition-all duration-500"
-                                         :style="'width: ' + Math.min(window.utilization, 100) + '%'"></div>
-                                </div>
-                                <!-- Reset time - compact -->
-                                <div x-show="window.resets_at" class="flex justify-between text-xs text-gray-500">
-                                    <span></span>
-                                    <span x-text="'Resets ' + formatResetTime(window.resets_at)"></span>
-                                </div>
-                                <!-- Token details - compact -->
-                                <div x-show="window.used !== undefined && window.limit !== undefined"
-                                     class="flex justify-between text-xs text-gray-500">
-                                    <span x-text="formatTokens(window.used) + ' / ' + formatTokens(window.limit)"></span>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-
-                    <!-- Extra usage (for Claude) -->
-                    <div x-show="provider.extra?.extra_usage" class="mt-4 pt-4 border-t border-gray-700">
-                        <p class="text-sm font-medium text-gray-300 mb-2">Extra Usage Credits</p>
-                        <div class="space-y-2">
-                            <div class="flex justify-between items-center">
-                                <span class="text-xs text-gray-400">Usage</span>
-                                <span class="text-xs text-gray-300" x-text="formatUtilization(provider.extra.extra_usage.utilization)"></span>
-                            </div>
-                            <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                                <div :class="getUtilizationClass({windows: [{utilization: provider.extra.extra_usage.utilization}]})"
-                                     class="h-2 rounded-full transition-all duration-500"
-                                     :style="'width: ' + Math.min(provider.extra.extra_usage.utilization, 100) + '%'"></div>
-                            </div>
-                            <div class="flex justify-between text-xs text-gray-500">
-                                <span x-text="'$' + (provider.extra.extra_usage.used_credits / 100).toFixed(2)"></span>
-                                <span x-text="'of $' + (provider.extra.extra_usage.monthly_limit / 100).toFixed(2)"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Kimi subscription -->
-                    <div x-show="provider.extra?.subscription" class="mt-4 pt-4 border-t border-gray-700">
-                        <p class="text-sm font-medium text-cyan-400 mb-2">Subscription</p>
-                        <div class="space-y-2">
-                            <!-- Plan info -->
-                            <div x-show="provider.extra?.subscription?.plan" class="flex items-center gap-2">
-                                <span class="text-sm text-gray-300" x-text="provider.extra?.subscription?.plan?.title"></span>
-                                <span class="text-xs text-gray-500" x-text="'(' + (provider.extra?.subscription?.plan?.level || '') + ')'"></span>
-                                <span :class="provider.extra?.subscription?.plan?.status === 'Active' ? 'text-green-400' : (provider.extra?.subscription?.plan?.status === 'Cancelled' ? 'text-yellow-400' : 'text-red-400')"
-                                      class="text-xs font-medium"
-                                      x-text="provider.extra?.subscription?.plan?.status"></span>
-                            </div>
-                            <!-- Expiry date -->
-                            <div x-show="provider.extra?.subscription?.expires_at" class="flex justify-between text-xs text-gray-500">
-                                <span>Expires:</span>
-                                <span x-text="formatSubscriptionExpiry(provider.extra?.subscription?.expires_at)"></span>
-                            </div>
-                            <!-- Feature quotas -->
-                            <template x-for="feature in (provider.extra?.subscription?.features || [])" :key="feature.feature">
-                                <div class="space-y-1">
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-xs font-medium text-blue-400" x-text="feature.feature"></span>
-                                        <span class="text-xs text-gray-500" x-text="feature.left + '/' + feature.total + ' left'"></span>
-                                    </div>
-                                    <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                                        <div :class="getFeatureUtilizationClass(feature)"
-                                             class="h-1.5 rounded-full transition-all duration-500"
-                                             :style="'width: ' + getFeatureUtilization(feature) + '%'"></div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                    </div>
-
-                    <!-- Error state for provider -->
-                    <div x-show="provider.error" class="text-red-400 text-sm bg-red-900/30 rounded-lg p-3">
-                        <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                        </svg>
-                        <span x-text="provider.error?.message || 'Error fetching usage'"></span>
-                    </div>
-
-                    <!-- Usage windows -->
-                    <div x-show="!provider.error && provider.windows && provider.windows.length > 0" class="space-y-4">
-                        <template x-for="window in provider.windows" :key="window.label">
-                            <div class="space-y-2">
-                                <div class="flex justify-between items-center">
-                                    <span class="text-sm font-medium text-gray-300" x-text="window.label"></span>
-                                    <span class="text-sm text-gray-400" x-text="formatUtilization(window.utilization)"></span>
-                                </div>
-                                <!-- Progress bar -->
-                                <div class="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
-                                    <div :class="getUtilizationClass({windows: [window]})"
-                                         class="h-2.5 rounded-full transition-all duration-500"
-                                         :style="'width: ' + Math.min(window.utilization, 100) + '%'"></div>
-                                </div>
-                                <!-- Reset time -->
-                                <div x-show="window.resets_at" class="flex justify-between text-xs text-gray-500">
-                                    <span>Resets:</span>
-                                    <span x-text="formatResetTime(window.resets_at)"></span>
-                                </div>
-                                <!-- Token details if available -->
-                                <div x-show="window.used !== undefined && window.limit !== undefined"
-                                     class="flex justify-between text-xs text-gray-500">
-                                    <span x-text="formatTokens(window.used) + ' used'"></span>
-                                    <span x-text="formatTokens(window.limit) + ' limit'"></span>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-
-                    <!-- Extra usage (for Claude) -->
-                    <div x-show="provider.extra?.extra_usage" class="mt-4 pt-4 border-t border-gray-700">
-                        <p class="text-sm font-medium text-gray-300 mb-2">Extra Usage Credits</p>
-                        <div class="space-y-2">
-                            <div class="flex justify-between items-center">
-                                <span class="text-sm text-gray-400">Usage</span>
-                                <span class="text-sm text-gray-300" x-text="formatUtilization(provider.extra.extra_usage.utilization)"></span>
-                            </div>
-                            <div class="w-full bg-gray-700 rounded-full h-2 overflow-hidden">
-                                <div :class="getUtilizationClass({windows: [{utilization: provider.extra.extra_usage.utilization}]})"
-                                     class="h-2 rounded-full transition-all duration-500"
-                                     :style="'width: ' + Math.min(provider.extra.extra_usage.utilization, 100) + '%'"></div>
-                            </div>
-                            <div class="flex justify-between text-xs text-gray-500">
-                                <span x-text="'$' + (provider.extra.extra_usage.used_credits / 100).toFixed(2)"></span>
-                                <span x-text="'of $' + (provider.extra.extra_usage.monthly_limit / 100).toFixed(2)"></span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Kimi subscription -->
-                    <div x-show="provider.extra?.subscription" class="mt-4 pt-4 border-t border-gray-700">
-                        <p class="text-sm font-medium text-cyan-400 mb-2">Subscription</p>
-                        <div class="space-y-2">
-                            <!-- Plan info -->
-                            <div x-show="provider.extra?.subscription?.plan" class="flex items-center gap-2">
-                                <span class="text-sm text-gray-300" x-text="provider.extra?.subscription?.plan?.title"></span>
-                                <span class="text-xs text-gray-500" x-text="'(' + (provider.extra?.subscription?.plan?.level || '') + ')'"></span>
-                                <span :class="provider.extra?.subscription?.plan?.status === 'Active' ? 'text-green-400' : (provider.extra?.subscription?.plan?.status === 'Cancelled' ? 'text-yellow-400' : 'text-red-400')"
-                                      class="text-xs font-medium"
-                                      x-text="provider.extra?.subscription?.plan?.status"></span>
-                            </div>
-                            <!-- Expiry date -->
-                            <div x-show="provider.extra?.subscription?.expires_at" class="flex justify-between text-xs text-gray-500">
-                                <span>Expires:</span>
-                                <span x-text="formatSubscriptionExpiry(provider.extra?.subscription?.expires_at)"></span>
-                            </div>
-                            <!-- Feature quotas -->
-                            <template x-for="feature in (provider.extra?.subscription?.features || [])" :key="feature.feature">
-                                <div class="space-y-1">
-                                    <div class="flex justify-between items-center">
-                                        <span class="text-xs font-medium text-blue-400" x-text="feature.feature"></span>
-                                        <span class="text-xs text-gray-500" x-text="feature.left + '/' + feature.total + ' left'"></span>
-                                    </div>
-                                    <div class="w-full bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                                        <div :class="getFeatureUtilizationClass(feature)"
-                                             class="h-1.5 rounded-full transition-all duration-500"
-                                             :style="'width: ' + getFeatureUtilization(feature) + '%'"></div>
-                                    </div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-            </template>
-        </div>
-
-        <!-- Empty state -->
-        <div x-show="!loading && filteredStats.length === 0 && !error"
-             class="text-center py-12 sm:py-20 bg-gray-800 rounded-xl border border-gray-700 mx-2 sm:mx-0">
-            <svg class="w-12 h-12 sm:w-16 sm:h-16 mx-auto text-gray-600 mb-3 sm:mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-            </svg>
-            <p class="text-gray-400 px-4">No providers configured.</p>
-            <p class="text-gray-500 text-xs sm:text-sm mt-2 px-4">Run <code class="bg-gray-700 px-2 py-1 rounded text-xs">llm-usage setup</code> to add providers.</p>
-        </div>
-
-        <!-- Last updated -->
-        <div x-show="lastUpdated" class="mt-8 text-center text-sm text-gray-500">
-            Last updated: <span x-text="lastUpdated"></span>
-        </div>
+    <div class="bar-actions">
+      <button type="button" class="btn" id="sortBtn" aria-label="Sort by urgency" title="Sort (s)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11M4 13.5 1.75 11M4 2.5 6.25 5"/><path d="M9 4h6M9 8h4.5M9 12h3"/></svg>
+        <span class="btn-label" id="sortLabel">Urgency</span>
+      </button>
+      <button type="button" class="btn" id="densityBtn" aria-label="Toggle density" title="Density (d)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-comfy"><rect x="1.5" y="2.5" width="13" height="4.5" rx="1.5"/><rect x="1.5" y="9" width="13" height="4.5" rx="1.5"/></svg>
+        <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-dense"><path d="M1.5 3h13M1.5 6.5h13M1.5 10h13M1.5 13.5h13"/></svg>
+      </button>
+      <button type="button" class="btn" id="themeBtn" aria-label="Switch theme" title="Theme (t)">
+        <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-dark"><path d="M13.5 9.6A6 6 0 1 1 6.4 2.5a4.8 4.8 0 0 0 7.1 7.1Z"/></svg>
+        <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-light"><circle cx="8" cy="8" r="3.1"/><path d="M8 .8v1.9M8 13.3v1.9M15.2 8h-1.9M2.7 8H.8M13.1 13.1l-1.4-1.4M4.3 4.3 2.9 2.9M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4"/></svg>
+        <svg viewBox="0 0 16 16" aria-hidden="true" class="ico-auto"><circle cx="8" cy="8" r="6.2"/><path d="M8 1.8a6.2 6.2 0 0 1 0 12.4Z" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button type="button" class="btn btn-go" id="refreshBtn" aria-label="Refresh now" title="Refresh (r)">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M14 8a6 6 0 1 1-1.8-4.3"/><path d="M14.2 1.4v3.2h-3.2"/></svg>
+      </button>
     </div>
+  </header>
 
-    <script>
-        function usageDashboard() {
-            return {
-                stats: null,
-                loading: true,
-                error: null,
-                autoRefresh: true,
-                refreshInterval: null,
-                lastUpdated: null,
-                selectedProviders: ['all'],
-                availableProviders: [],
-                sortBy: 'name', // 'name' or 'usage'
-                compactMode: true, // Default to compact/collapsed view
+  <nav class="filters" id="filters" aria-label="Provider filter" hidden></nav>
 
-                init() {
-                    this.loadProviders();
-                    this.refresh();
+  <main class="main" id="main">
+    <div class="banner" id="banner" hidden></div>
+    <section class="hero" id="hero" hidden aria-label="Tightest limit"></section>
+    <div class="grid" id="grid"></div>
+    <div class="blank" id="blank" hidden></div>
+  </main>
+</div>
 
-                    // Watch for auto-refresh changes
-                    this.$watch('autoRefresh', value => {
-                        if (value) {
-                            this.refreshInterval = setInterval(() => this.refresh(), 30000);
-                        } else {
-                            clearInterval(this.refreshInterval);
-                        }
-                    });
+<template id="tpl-card">
+  <article class="card">
+    <header class="card-head">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="card-name"></span>
+      <span class="card-account"></span>
+      <span class="chip"></span>
+    </header>
+    <div class="card-body"></div>
+  </article>
+</template>
 
-                    // Start auto-refresh if enabled
-                    if (this.autoRefresh) {
-                        this.refreshInterval = setInterval(() => this.refresh(), 30000);
-                    }
-                },
+<template id="tpl-window">
+  <div class="win">
+    <div class="win-top">
+      <span class="win-label"></span>
+      <span class="win-inline"></span>
+      <span class="win-pct"></span>
+    </div>
+    <div class="meter">
+      <div class="meter-fill"></div>
+      <div class="meter-pace" hidden></div>
+    </div>
+    <div class="win-foot">
+      <span class="win-amounts"></span>
+      <span class="win-reset"></span>
+    </div>
+  </div>
+</template>
 
-                async loadProviders() {
-                    try {
-                        const response = await fetch('/api/v1/providers');
-                        if (response.ok) {
-                            this.availableProviders = await response.json();
-                        }
-                    } catch (e) {
-                        console.error('Failed to load providers:', e);
-                    }
-                },
-
-                async refresh() {
-                    this.loading = true;
-                    this.error = null;
-
-                    try {
-                        const params = new URLSearchParams();
-                        if (!this.selectedProviders.includes('all')) {
-                            params.set('provider', this.selectedProviders.join(','));
-                        }
-
-                        const response = await fetch('/api/v1/usage?' + params.toString());
-                        if (!response.ok) {
-                            throw new Error('Failed to fetch usage data');
-                        }
-
-                        this.stats = await response.json();
-                        this.lastUpdated = new Date().toLocaleTimeString();
-                    } catch (e) {
-                        this.error = e.message;
-                    } finally {
-                        this.loading = false;
-                    }
-                },
-
-                get filteredStats() {
-                    if (!this.stats || !Array.isArray(this.stats.providers)) return [];
-
-                    const providers = [...this.stats.providers];
-
-                    return providers.sort((a, b) => {
-                        if (this.sortBy === 'name') {
-                            const nameA = this.getProviderName(a.provider);
-                            const nameB = this.getProviderName(b.provider);
-                            if (nameA !== nameB) return nameA.localeCompare(nameB);
-                            // If same provider name, sort by account
-                            const accountA = a.extra?.account || '';
-                            const accountB = b.extra?.account || '';
-                            return accountA.localeCompare(accountB);
-                        } else if (this.sortBy === 'usage') {
-                            const usageA = this.getMaxUtilization(a);
-                            const usageB = this.getMaxUtilization(b);
-                            return usageB - usageA; // Highest usage first
-                        }
-                        return 0;
-                    });
-                },
-
-                getProviderName(id) {
-                    const names = {
-                        'claude': 'Claude',
-                        'kimi': 'Kimi',
-                        'zai': 'Z.AI'
-                    };
-                    return names[id] || id.toUpperCase();
-                },
-
-                getMaxUtilization(provider) {
-                    if (!provider.windows || provider.windows.length === 0) return 0;
-                    return Math.round(Math.max(...provider.windows.map(w => w.utilization || 0)));
-                },
-
-                getUtilizationClass(provider) {
-                    const max = this.getMaxUtilization(provider);
-                    if (max >= 90) return 'bg-red-500';
-                    if (max >= 75) return 'bg-yellow-500';
-                    return 'bg-green-500';
-                },
-
-                formatUtilization(value) {
-                    return (value || 0).toFixed(1) + '%';
-                },
-
-                formatResetTime(isoString) {
-                    const now = new Date();
-                    const reset = new Date(isoString);
-                    const diff = reset - now;
-
-                    if (diff < 0) return 'Expired';
-
-                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-                    if (days > 0) return 'in ' + days + 'd ' + hours + 'h';
-                    if (hours > 0) return 'in ' + hours + 'h ' + minutes + 'm';
-                    return 'in ' + minutes + 'm';
-                },
-
-                formatTokens(value) {
-                    if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
-                    if (value >= 1000) return (value / 1000).toFixed(1) + 'K';
-                    return value.toString();
-                },
-
-                toggleProvider(providerId) {
-                    if (providerId === 'all') {
-                        this.selectedProviders = ['all'];
-                    } else {
-                        this.selectedProviders = this.selectedProviders.filter(p => p !== 'all');
-                        const index = this.selectedProviders.indexOf(providerId);
-                        if (index > -1) {
-                            this.selectedProviders.splice(index, 1);
-                        } else {
-                            this.selectedProviders.push(providerId);
-                        }
-                        if (this.selectedProviders.length === 0) {
-                            this.selectedProviders = ['all'];
-                        }
-                    }
-                    this.refresh();
-                },
-
-                formatSubscriptionExpiry(isoString) {
-                    if (!isoString) return '';
-                    const now = new Date();
-                    const expiry = new Date(isoString);
-                    const diff = expiry - now;
-
-                    const dateStr = expiry.toLocaleDateString();
-
-                    if (diff < 0) return dateStr + ' (expired)';
-
-                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                    if (days > 0) return dateStr + ' (' + days + 'd remaining)';
-
-                    const hours = Math.floor(diff / (1000 * 60 * 60));
-                    return dateStr + ' (' + hours + 'h remaining)';
-                },
-
-                getFeatureUtilization(feature) {
-                    if (!feature || feature.total === 0) return 0;
-                    // Show used percentage (total - left = used)
-                    return Math.round(((feature.total - feature.left) / feature.total) * 100);
-                },
-
-                getFeatureUtilizationClass(feature) {
-                    const used = this.getFeatureUtilization(feature);
-                    if (used >= 90) return 'bg-red-500';
-                    if (used >= 75) return 'bg-yellow-500';
-                    return 'bg-green-500';
-                }
-            };
-        }
-    </script>
+<script src="app.js"></script>
 </body>
 </html>
